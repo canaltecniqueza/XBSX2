@@ -143,6 +143,9 @@ GSTextureCache::Source* GSTextureCache::LookupDepthSource(const GIFRegTEX0& TEX0
 			dst->m_texture ? dst->m_texture->GetID() : 0,
 			TEX0.TBP0, psm_str(psm));
 
+		// trigger tex-is-fb path
+		GSRendererHW::GetInstance()->UpdateTexIsFB(dst, TEX0);
+
 		// Create a shared texture source
 		src = new Source(TEX0, TEXA, true);
 		src->m_texture = dst->m_texture;
@@ -471,7 +474,6 @@ GSTextureCache::Target* GSTextureCache::LookupTarget(const GIFRegTEX0& TEX0, con
 				GL_CACHE("TC: Lookup Frame %dx%d, perfect hit: %d (0x%x -> 0x%x %s)", size.x, size.y, dst->m_texture->GetID(), bp, t->m_end_block, psm_str(TEX0.PSM));
 				if (real_h > 0)
 					ScaleTargetForDisplay(dst, TEX0, real_h);
-
 				break;
 			}
 		}
@@ -680,6 +682,7 @@ void GSTextureCache::ScaleTargetForDisplay(Target* t, const GIFRegTEX0& dispfb, 
 	// We unconditionally preload the frame here, because otherwise we'll end up with blackness for one frame (when the expand happens).
 	t->m_dirty.push_back(GSDirtyRect(GSVector4i(0, 0, t->m_TEX0.TBW * 64, needed_height), t->m_TEX0.PSM, t->m_TEX0.TBW));
 
+	
 	// Inject the new height back into the cache.
 	GetTargetHeight(t->m_TEX0.TBP0, t->m_TEX0.TBW, t->m_TEX0.PSM, static_cast<u32>(needed_height));
 }
@@ -1009,16 +1012,16 @@ void GSTextureCache::InvalidateLocalMem(const GSOffset& off, const GSVector4i& r
 		r.z,
 		r.w);
 
-	if (GSConfig.HWDisableReadbacks)
-	{
-		Console.Error("Skipping readback of %ux%u @ %u,%u", r.width(), r.height(), r.left, r.top);
-		return;
-	}
-
 	// No depth handling please.
 	if (psm == PSM_PSMZ32 || psm == PSM_PSMZ24 || psm == PSM_PSMZ16 || psm == PSM_PSMZ16S)
 	{
 		GL_INS("ERROR: InvalidateLocalMem depth format isn't supported (%d,%d to %d,%d)", r.x, r.y, r.z, r.w);
+		if (GSConfig.HWDownloadMode != GSHardwareDownloadMode::Enabled)
+		{
+			DevCon.Error("Skipping depth readback of %ux%u @ %u,%u", r.width(), r.height(), r.left, r.top);
+			return;
+		}
+
 		if (!GSConfig.UserHacks_DisableDepthSupport)
 		{
 			auto& dss = m_dst[DepthStencil];
@@ -1068,7 +1071,12 @@ void GSTextureCache::InvalidateLocalMem(const GSOffset& off, const GSVector4i& r
 				if (t->m_32_bits_fmt && t->m_TEX0.PSM > PSM_PSMCT24)
 					t->m_TEX0.PSM = PSM_PSMCT32;
 
-				if (GSConfig.UserHacks_DisablePartialInvalidation)
+				if (GSConfig.HWDownloadMode != GSHardwareDownloadMode::Enabled)
+				{
+					const GSVector4i rb_rc((!GSConfig.UserHacks_DisablePartialInvalidation && r.x == 0 && r.y == 0) ? t->m_valid : r.rintersect(t->m_valid));
+					DevCon.Error("Skipping depth readback of %ux%u @ %u,%u", rb_rc.width(), rb_rc.height(), rb_rc.left, rb_rc.top);
+				}
+				else if (GSConfig.UserHacks_DisablePartialInvalidation)
 				{
 					Read(t, r.rintersect(t->m_valid));
 				}
@@ -1471,6 +1479,9 @@ GSTextureCache::Source* GSTextureCache::CreateSource(const GIFRegTEX0& TEX0, con
 		// Be aware that you can't use StrechRect between BeginScene/EndScene.
 		// So it could be tricky to put in the middle of the DrawPrims
 
+		// Texture is created to keep code compatibility
+		//GSTexture* dTex = g_gs_device->CreateTexture(tw, th, false, GSTexture::Format::Color, true);
+
 		// Keep a trace of origin of the texture
 		src->m_texture = dst->m_texture;
 		src->m_target = true;
@@ -1649,7 +1660,7 @@ GSTextureCache::Source* GSTextureCache::CreateSource(const GIFRegTEX0& TEX0, con
 			use_texture && // not reinterpreting the RT
 			w == dst->m_texture->GetWidth() && h == dst->m_texture->GetHeight() && // same dimensions
 			!m_temporary_source // not the shuffle case above
-			)
+		)
 		{
 			// sample the target directly
 			src->m_texture = dst->m_texture;
@@ -1670,8 +1681,8 @@ GSTextureCache::Source* GSTextureCache::CreateSource(const GIFRegTEX0& TEX0, con
 			// 'src' is the new texture cache entry (hence the output)
 			GSTexture* sTex = dst->m_texture;
 			GSTexture* dTex = use_texture ?
-				g_gs_device->CreateTexture(w, h, false, GSTexture::Format::Color, true) :
-				g_gs_device->CreateRenderTarget(w, h, GSTexture::Format::Color, false);
+                                  g_gs_device->CreateTexture(w, h, false, GSTexture::Format::Color, true) :
+                                  g_gs_device->CreateRenderTarget(w, h, GSTexture::Format::Color, false);
 			src->m_texture = dTex;
 
 			if (use_texture)
@@ -2105,7 +2116,7 @@ void GSTextureCache::Surface::ResizeTexture(int new_width, int new_height, GSVec
 
 	const bool clear = (new_width > width || new_height > height);
 	GSTexture* tex = m_texture->IsDepthStencil() ?
-						 g_gs_device->CreateDepthStencil(new_width, new_height, m_texture->GetFormat(), clear) :
+                         g_gs_device->CreateDepthStencil(new_width, new_height, m_texture->GetFormat(), clear) :
                          g_gs_device->CreateRenderTarget(new_width, new_height, m_texture->GetFormat(), clear);
 	if (!tex)
 	{

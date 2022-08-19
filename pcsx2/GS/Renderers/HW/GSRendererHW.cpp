@@ -135,13 +135,14 @@ bool GSRendererHW::UpdateTexIsFB(GSTextureCache::Target* dst, const GIFRegTEX0& 
 	}
 	else if (m_vt.m_primclass == GS_SPRITE_CLASS)
 	{
-		if (TEX0.TBP0 == m_context->FRAME.Block())
+		if (TEX0.TBP0 == m_context->FRAME.Block() || TEX0.TBP0 == m_context->ZBUF.Block())
 		{
 			m_tex_is_fb = IsPossibleTextureShuffle(dst, TEX0);
 
 			if (!m_tex_is_fb && !m_vt.IsLinear())
 			{
 				// Make sure that we're not sampling away from the area we're rendering.
+
 				// We need to take the absolute here, because Beyond Good and Evil undithers itself using a -1,-1 offset.
 				const GSVector4 diff(m_vt.m_min.p.xyxy(m_vt.m_max.p) - m_vt.m_min.t.xyxy(m_vt.m_max.t));
 				if ((diff.abs() < GSVector4(1.0f)).alltrue())
@@ -201,6 +202,7 @@ void GSRendererHW::VSync(u32 field, bool registers_written)
 	if (m_reset)
 	{
 		m_tc->RemoveAll();
+
 		m_reset = false;
 	}
 
@@ -761,6 +763,7 @@ GSVector2i GSRendererHW::GetTargetSize(GSVector2i* unscaled_size)
 
 	const u32 width = m_context->FRAME.FBW * 64u;
 	const u32 height = m_tc->GetTargetHeight(m_context->FRAME.FBP, m_context->FRAME.FBW, m_context->FRAME.PSM, min_height);
+
 	if (unscaled_size)
 	{
 		unscaled_size->x = static_cast<int>(width);
@@ -1319,7 +1322,7 @@ void GSRendererHW::Draw()
 	const GSVector4 delta_p = m_vt.m_max.p - m_vt.m_min.p;
 	const bool single_page = (delta_p.x <= 64.0f) && (delta_p.y <= 64.0f);
 
-	// We trigger the sw prim render here super early, to avoid creating superfluous render targets.
+	// we trigger the sw prim render here super early, to avoid creating superfluous render targets.
 	if (CanUseSwPrimRender(no_rt, no_ds, draw_sprite_tex) && SwPrimRender())
 	{
 		GL_CACHE("Possible texture decompression, drawn with SwPrimRender()");
@@ -1607,7 +1610,7 @@ void GSRendererHW::Draw()
 	GSTextureCache::Target* ds = nullptr;
 	if (!no_ds)
 		ds = m_tc->LookupTarget(TEX0, t_size, GSTextureCache::DepthStencil, context->DepthWrite());
-
+	
 	if (rt)
 	{
 		// Be sure texture shuffle detection is properly propagated
@@ -1646,7 +1649,7 @@ void GSRendererHW::Draw()
 
 		std::string s;
 
-		if (s_savet && s_n >= s_saven && m_src)
+		if (rt && s_savet && s_n >= s_saven && m_src)
 		{
 			s = StringUtil::StdStringFromFormat("%05d_f%lld_itex_%05x_%s_%d%d_%02x_%02x_%02x_%02x.dds",
 				s_n, frame, (int)context->TEX0.TBP0, psm_str(context->TEX0.PSM),
@@ -1664,7 +1667,7 @@ void GSRendererHW::Draw()
 			}
 		}
 
-		if (rt && s_save && s_n >= s_saven)
+		if (ds && s_save && s_n >= s_saven)
 		{
 			s = StringUtil::StdStringFromFormat("%05d_f%lld_rt0_%05x_%s.bmp", s_n, frame, context->FRAME.Block(), psm_str(context->FRAME.PSM));
 
@@ -1672,7 +1675,7 @@ void GSRendererHW::Draw()
 				rt->m_texture->Save(m_dump_root + s);
 		}
 
-		if (ds && s_savez && s_n >= s_saven)
+		if (s_savez && s_n >= s_saven)
 		{
 			s = StringUtil::StdStringFromFormat("%05d_f%lld_rz0_%05x_%s.bmp", s_n, frame, context->ZBUF.Block(), psm_str(context->ZBUF.PSM));
 
@@ -1971,7 +1974,7 @@ void GSRendererHW::EmulateZbuffer()
 		}
 		else if (!m_context->ZBUF.ZMSK)
 		{
-			m_conf.cb_ps.TA_MaxDepth_Af.z = static_cast<float>(max_z) * 0x1p-32f;
+			m_conf.cb_ps.TA_MaxDepth_Af.z = static_cast<float>(max_z) * (g_gs_device->Features().clip_control ? 0x1p-32f : 0x1p-24f);
 			m_conf.ps.zclamp = 1;
 		}
 	}
@@ -2348,7 +2351,7 @@ void GSRendererHW::EmulateBlending(bool& DATE_PRIMID, bool& DATE_BARRIER, bool& 
 	m_conf.ps.blend_c = ALPHA.C;
 	m_conf.ps.blend_d = ALPHA.D;
 
-	// When AA1 is enabled and Alpha Blending is disabled, alpha blending done with coverage instead of alpha.
+		// When AA1 is enabled and Alpha Blending is disabled, alpha blending done with coverage instead of alpha.
 	// We use a COV value of 128 (full coverage) in triangles (except the edge geometry, which we can't do easily).
 	if (IsCoverageAlpha())
 	{
@@ -2714,7 +2717,7 @@ void GSRendererHW::EmulateBlending(bool& DATE_PRIMID, bool& DATE_BARRIER, bool& 
 			// For mixed blend, the source blend is done in the shader (so we use CONST_ONE as a factor).
 			m_conf.blend = {true, GSDevice::CONST_ONE, blend.dst, blend.op, m_conf.ps.blend_c == 2, ALPHA.FIX};
 			m_conf.ps.blend_mix = (blend.op == GSDevice::OP_REV_SUBTRACT) ? 2 : 1;
-			
+
 			// Elide DSB colour output if not used by dest.
 			m_conf.ps.no_color1 |= !GSDevice::IsDualSourceBlendFactor(blend.dst);
 
@@ -3143,11 +3146,16 @@ void GSRendererHW::EmulateTextureSampler(const GSTextureCache::Source* tex)
 				m_conf.ds = nullptr;
 				m_tex_is_fb = false;
 			}
+			else if (g_gs_device->Features().depth_fetch)
+			{
+				// sample from ds instead
+				m_conf.tex = nullptr;
+				m_conf.ps.tex_is_ds = true;
+			}
 		}
 		else
 		{
 			// weird... we detected a fb read, but didn't end up using it?
-			DevCon.WriteLn("Tex-is-FB set but not used?");
 			m_tex_is_fb = false;
 		}
 	}
@@ -3697,31 +3705,31 @@ void GSRendererHW::DrawPrims(GSTexture* rt, GSTexture* ds, GSTextureCache::Sourc
 
 bool GSRendererHW::CanUseSwPrimRender(bool no_rt, bool no_ds, bool draw_sprite_tex)
 {
-	// Master enable.
+	// master enable
 	if (GSConfig.UserHacks_CPUSpriteRenderBW == 0)
 		return false;
 
-	// We don't ever want to do this when we have a depth buffer, and only for textured sprites.
+	// we don't ever want to do this when we have a depth buffer, and only for textured sprites
 	if (no_rt || !no_ds || !draw_sprite_tex)
 		return false;
 
-	// Check the size threshold. Spider-man 2 uses a FBW of 32 for some silly reason...
+	// check the size threshold
+	// spider-man 2 uses a FBW of 32 for some stupid reason...
 	if (m_context->FRAME.FBW > static_cast<u32>(GSConfig.UserHacks_CPUSpriteRenderBW) && m_context->FRAME.FBW != 32)
 		return false;
 
-	// We shouldn't be using mipmapping, and this shouldn't be a blended draw.
-	// TODO: Jak 3 builds textures semi-procedurally using blending, and would be a good candidate here.
+	// we shouldn't be using mipmapping, and this shouldn't be a blended draw
 	if (IsMipMapActive() || !IsOpaque())
 		return false;
 
-	// Make sure this isn't something we've actually rendered to (e.g. a texture shuffle).
-	// We do this by checking the texture block width against the target's block width, as all the decompression draws
+	// make sure this isn't something we've actually rendered to (e.g. a texture shuffle)
+	// we do this by checking the texture block width against the target's block width, as all the decompression draws
 	// will use a much smaller block size than the framebuffer.
 	GSTextureCache::Target* src_target = m_tc->GetTargetWithSharedBits(m_context->TEX0.TBP0, m_context->TEX0.PSM);
 	if (src_target && src_target->m_TEX0.TBW == m_context->TEX0.TBW)
 		return false;
 
-	// We can use the sw prim render path!
+	// we can use the sw prim render path!
 	return true;
 }
 
@@ -3747,16 +3755,16 @@ bool GSRendererHW::SwPrimRender()
 	data.index_count = m_index.tail;
 	data.scanmsk_value = m_env.SCANMSK.MSK;
 
-	// Skip per pixel division if q is constant.
+	// skip per pixel division if q is constant.
 	// Optimize the division by 1 with a nop. It also means that GS_SPRITE_CLASS must be processed when !m_vt.m_eq.q.
-	// If you have both GS_SPRITE_CLASS && m_vt.m_eq.q, it will depends on the first part of the 'OR'.
+	// If you have both GS_SPRITE_CLASS && m_vt.m_eq.q, it will depends on the first part of the 'OR'
 	const u32 q_div = ((m_vt.m_eq.q && m_vt.m_min.t.z != 1.0f) || (!m_vt.m_eq.q && m_vt.m_primclass == GS_SPRITE_CLASS));
 	GSVertexSW::s_cvb[m_vt.m_primclass][PRIM->TME][PRIM->FST][q_div](m_context, data.vertex, m_vertex.buff, m_vertex.next);
 
 	GSVector4i scissor = GSVector4i(m_context->scissor.in);
 	GSVector4i bbox = GSVector4i(m_vt.m_min.p.floor().xyxy(m_vt.m_max.p.ceil()));
 
-	// Points and lines may have zero area bbox (single line: 0, 0 - 256, 0)
+	// points and lines may have zero area bbox (single line: 0, 0 - 256, 0)
 
 	if (m_vt.m_primclass == GS_POINT_CLASS || m_vt.m_primclass == GS_LINE_CLASS)
 	{
@@ -4273,6 +4281,7 @@ void GSRendererHW::OI_DoubleHalfClear(GSTextureCache::Target*& rt, GSTextureCach
 
 		// If both buffers are side by side we can expect a fast clear in on-going
 		const u32 color = v[1].RGBAQ.U32[0];
+
 		g_gs_device->ClearRenderTarget(rt->m_texture, color);
 	}
 }
@@ -4605,7 +4614,7 @@ bool GSRendererHW::OI_RozenMaidenGebetGarden(GSTexture* rt, GSTexture* ds, GSTex
 			TEX0.TBW = m_context->FRAME.FBW;
 			TEX0.PSM = m_context->FRAME.PSM;
 
-			if (GSTextureCache::Target* tmp_rt = m_tc->LookupTarget(TEX0, GetTargetSize(), GSTextureCache::RenderTarget, true))
+			if (GSTextureCache::Target* tmp_rt = m_tc->LookupTarget(TEX0, GetTargetSize(false), GSTextureCache::RenderTarget, true))
 			{
 				GL_INS("OI_RozenMaidenGebetGarden FB clear");
 				g_gs_device->ClearRenderTarget(tmp_rt->m_texture, 0);
@@ -4623,7 +4632,7 @@ bool GSRendererHW::OI_RozenMaidenGebetGarden(GSTexture* rt, GSTexture* ds, GSTex
 			TEX0.TBW = m_context->FRAME.FBW;
 			TEX0.PSM = m_context->ZBUF.PSM;
 
-			if (GSTextureCache::Target* tmp_ds = m_tc->LookupTarget(TEX0, GetTargetSize(), GSTextureCache::DepthStencil, true))
+			if (GSTextureCache::Target* tmp_ds = m_tc->LookupTarget(TEX0, GetTargetSize(false), GSTextureCache::DepthStencil, true))
 			{
 				GL_INS("OI_RozenMaidenGebetGarden ZB clear");
 				g_gs_device->ClearDepth(tmp_ds->m_texture);

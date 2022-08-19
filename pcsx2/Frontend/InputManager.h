@@ -32,6 +32,9 @@ enum class InputSourceType : u32
 #ifdef _WIN32
 	//DInput,
 	XInput,
+#ifndef _UWP
+	RawInput,
+#endif
 #endif
 #ifdef SDL_BUILD
 	SDL,
@@ -292,6 +295,9 @@ namespace InputManager
 
 	/// Updates relative pointer position. Can call from the UI thread, use when host supports relative coordinate reporting.
 	void UpdatePointerRelativeDelta(u32 index, InputPointerAxis axis, float d, bool raw_input = false);
+
+	/// Returns true if the raw input source is being used.
+	bool IsUsingRawInput();
 
 	/// Returns true if any bindings are present which require relative mouse movement.
 	bool HasPointerAxisBinds();

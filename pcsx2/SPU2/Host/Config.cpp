@@ -102,7 +102,6 @@ void ReadSettings()
 	SndOutLatencyMS = Host::GetIntSettingValue("SPU2/Output", "Latency", 100);
 	SynchMode = Host::GetIntSettingValue("SPU2/Output", "SynchMode", 0);
 	numSpeakers = Host::GetIntSettingValue("SPU2/Output", "SpeakerConfiguration", 0);
-	dplLevel = Host::GetIntSettingValue("SPU2/Output", "DplDecodingLevel", 0);
 
 	SoundtouchCfg::ReadSettings();
 	DebugConfig::ReadSettings();
@@ -115,7 +114,12 @@ void ReadSettings()
 	if (mods[OutputModule] == nullptr)
 	{
 		Console.Warning("* SPU2: Unknown output module '%s' specified in configuration file.", modname.c_str());
+#ifndef _UWP
 		Console.Warning("* SPU2: Defaulting to Cubeb (%s).", CubebOut->GetIdent());
 		OutputModule = FindOutputModuleById(CubebOut->GetIdent());
+#else
+		Console.Warning("* SPU2: Defaulting to XAudio2 (%s).", XAudio2Out->GetIdent());
+		OutputModule = FindOutputModuleById(XAudio2Out->GetIdent());
+#endif
 	}
 }

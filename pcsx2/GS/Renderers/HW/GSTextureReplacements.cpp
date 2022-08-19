@@ -21,6 +21,7 @@
 #include "common/Path.h"
 #include "common/StringUtil.h"
 #include "common/ScopedGuard.h"
+#include "common/TextureDecompress.h"
 
 #include "Config.h"
 #include "GS/GSLocalMemory.h"
@@ -114,7 +115,9 @@ namespace GSTextureReplacements
 	static std::string GetGameTextureDirectory();
 	static std::string GetDumpFilename(const TextureName& name, u32 level);
 	static std::string GetGameSerial();
+	static bool IsFormatSupported(GSTexture::Format format);
 	static std::optional<ReplacementTexture> LoadReplacementTexture(const TextureName& name, const std::string& filename, bool only_base_image);
+	static void DecompressReplacementTexture(ReplacementTexture& rtex);
 	static void QueueAsyncReplacementTextureLoad(const TextureName& name, const std::string& filename, bool mipmap);
 	static void PrecacheReplacementTextures();
 	static void ClearReplacementTextures();
@@ -260,6 +263,26 @@ std::string GSTextureReplacements::GetGameSerial()
 #else
 	return VMManager::GetGameSerial();
 #endif
+}
+
+bool GSTextureReplacements::IsFormatSupported(GSTexture::Format format)
+{
+	switch (format)
+	{
+	case GSTexture::Format::Color:
+		return true;
+
+	case GSTexture::Format::BC1:
+	case GSTexture::Format::BC2:
+	case GSTexture::Format::BC3:
+		return g_gs_device->Features().dxt_textures;
+
+	case GSTexture::Format::BC7:
+		return g_gs_device->Features().bptc_textures;
+
+	default:
+		return false;
+	}
 }
 
 void GSTextureReplacements::Initialize(GSTextureCache* tc)
@@ -454,9 +477,97 @@ std::optional<GSTextureReplacements::ReplacementTexture> GSTextureReplacements::
 
 	ReplacementTexture rtex;
 	if (!loader(filename.c_str(), &rtex, only_base_image))
+	{
+		Console.Warning("Failed to load replacement texture %s", filename.c_str());
 		return std::nullopt;
+	}
+
+	// decompress formats not supported by the host GPU
+	if (!IsFormatSupported(rtex.format))
+		DecompressReplacementTexture(rtex);
 
 	return rtex;
+}
+
+template <GSTexture::Format format>
+static void DecompressBC(u32 width, u32 height, u32& pitch, std::vector<u8>& data)
+{
+	constexpr u32 BC_BLOCK_SIZE = 4;
+	constexpr u32 BC_BLOCK_BYTES = 16;
+
+	const u32 new_pitch = width * sizeof(u32);
+	std::vector<u8> new_data(new_pitch * height);
+
+	const u32 blocks_wide = (width + (BC_BLOCK_SIZE - 1)) / BC_BLOCK_SIZE;
+	const u32 blocks_high = (height + (BC_BLOCK_SIZE - 1)) / BC_BLOCK_SIZE;
+	for (u32 y = 0; y < blocks_high; y++)
+	{
+		const u8* block_in = data.data() + y * pitch;
+		for (u32 x = 0; x < blocks_wide; x++, block_in += BC_BLOCK_BYTES)
+		{
+			// decompress block
+			switch (format)
+			{
+				case GSTexture::Format::BC1:
+					DecompressBlockBC1(x * BC_BLOCK_SIZE, y * BC_BLOCK_SIZE, new_pitch, block_in, reinterpret_cast<u8*>(new_data.data()));
+					break;
+				case GSTexture::Format::BC2:
+					DecompressBlockBC2(x * BC_BLOCK_SIZE, y * BC_BLOCK_SIZE, new_pitch, block_in, reinterpret_cast<u8*>(new_data.data()));
+					break;
+				case GSTexture::Format::BC3:
+					DecompressBlockBC3(x * BC_BLOCK_SIZE, y * BC_BLOCK_SIZE, new_pitch, block_in, reinterpret_cast<u8*>(new_data.data()));
+					break;
+
+				case GSTexture::Format::BC7:
+				{
+					u32 block_pixels_out[BC_BLOCK_SIZE * BC_BLOCK_SIZE];
+					bc7decomp::unpack_bc7(block_in, reinterpret_cast<bc7decomp::color_rgba*>(block_pixels_out));
+
+					// and write it to the new image
+					const u32* copy_in_ptr = block_pixels_out;
+					u8* copy_out_ptr = new_data.data() + (((y * BC_BLOCK_SIZE) * new_pitch) + (x * BC_BLOCK_SIZE * sizeof(u32)));
+					for (u32 sy = 0; sy < 4; sy++)
+					{
+						std::memcpy(copy_out_ptr, copy_in_ptr, sizeof(u32) * BC_BLOCK_SIZE);
+						copy_in_ptr += BC_BLOCK_SIZE;
+						copy_out_ptr += new_pitch;
+					}
+				}
+				break;
+			}
+		}
+	}
+
+	pitch = new_pitch;
+	data = std::move(new_data);
+}
+
+static void DecompressTextureLevel(GSTexture::Format format, u32 width, u32 height, u32& pitch, std::vector<u8>& data)
+{
+	// clang-format off
+	switch (format)
+	{
+	case GSTexture::Format::BC1: DecompressBC<GSTexture::Format::BC1>(width, height, pitch, data); break;
+	case GSTexture::Format::BC2: DecompressBC<GSTexture::Format::BC2>(width, height, pitch, data); break;
+	case GSTexture::Format::BC3: DecompressBC<GSTexture::Format::BC3>(width, height, pitch, data); break;
+	case GSTexture::Format::BC7: DecompressBC<GSTexture::Format::BC7>(width, height, pitch, data); break;
+	default: break;
+	}
+	// clang-format on
+}
+
+void GSTextureReplacements::DecompressReplacementTexture(ReplacementTexture& rtex)
+{
+	DecompressTextureLevel(rtex.format, rtex.width, rtex.height, rtex.pitch, rtex.data);
+
+	for (u32 mip = 0; mip < static_cast<u32>(rtex.mips.size()); mip++)
+	{
+		const u32 mip_width = std::max<u32>(rtex.width >> (mip + 1), 1u);
+		const u32 mip_height = std::max<u32>(rtex.height >> (mip + 1), 1u);
+		DecompressTextureLevel(rtex.format, mip_width, mip_height, rtex.mips[mip].pitch, rtex.mips[mip].data);
+	}
+
+	rtex.format = GSTexture::Format::Color;
 }
 
 void GSTextureReplacements::QueueAsyncReplacementTextureLoad(const TextureName& name, const std::string& filename, bool mipmap)

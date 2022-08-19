@@ -436,7 +436,7 @@ extern void cpuSetNextEvent( u32 startCycle, s32 delta );
 extern void cpuSetNextEventDelta( s32 delta );
 extern int  cpuTestCycle( u32 startCycle, s32 delta );
 extern void cpuSetEvent();
-extern int cpuGetCycles(int interrupt);
+extern int  cpuGetCycles(int interrupt);
 
 extern void _cpuEventTest_Shared();		// for internal use by the Dynarecs and Ints inside R5900:
 

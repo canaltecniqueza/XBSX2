@@ -75,6 +75,7 @@
 
 bool IsTAPDevice(const TCHAR* guid)
 {
+#ifndef _UWP
 	wil::unique_hkey netcard_key;
 	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, ADAPTER_KEY, 0, KEY_READ, netcard_key.put()) != ERROR_SUCCESS)
 		return false;
@@ -133,10 +134,14 @@ bool IsTAPDevice(const TCHAR* guid)
 	}
 
 	return false;
+#else
+	return false;
+#endif
 }
 
 std::vector<AdapterEntry> TAPAdapter::GetAdapters()
 {
+#ifndef _UWP
 	std::vector<AdapterEntry> tap_nic;
 	DWORD len;
 	DWORD cSubKeys = 0;
@@ -199,6 +204,9 @@ std::vector<AdapterEntry> TAPAdapter::GetAdapters()
 	}
 
 	return tap_nic;
+#else
+	return {};
+#endif
 }
 
 AdapterOptions TAPAdapter::GetAdapterOptions()
@@ -227,6 +235,7 @@ static int TAPSetStatus(HANDLE handle, int status)
 //Open the TAP adapter and set the connection to enabled :)
 HANDLE TAPOpen(const std::string& device_guid)
 {
+#ifndef _UWP
 	struct
 	{
 		unsigned long major;
@@ -266,6 +275,9 @@ HANDLE TAPOpen(const std::string& device_guid)
 	}
 
 	return handle.release();
+#else
+	return INVALID_HANDLE_VALUE;
+#endif
 }
 
 PIP_ADAPTER_ADDRESSES FindAdapterViaIndex(PIP_ADAPTER_ADDRESSES adapterList, int ifIndex)
@@ -286,6 +298,7 @@ PIP_ADAPTER_ADDRESSES FindAdapterViaIndex(PIP_ADAPTER_ADDRESSES adapterList, int
 //after it's finished reading the needed data from IP_ADAPTER_ADDRESSES
 bool TAPGetWin32Adapter(const std::string& name, PIP_ADAPTER_ADDRESSES adapter, std::unique_ptr<IP_ADAPTER_ADDRESSES[]>* buffer)
 {
+#ifndef _UWP
 	int neededSize = 256;
 	std::unique_ptr<IP_ADAPTER_ADDRESSES[]> AdapterInfo = std::make_unique<IP_ADAPTER_ADDRESSES[]>(neededSize);
 	ULONG dwBufLen = sizeof(IP_ADAPTER_ADDRESSES) * neededSize;
@@ -533,6 +546,9 @@ bool TAPGetWin32Adapter(const std::string& name, PIP_ADAPTER_ADDRESSES adapter, 
 	}
 
 	return false;
+#else
+	return false;
+#endif
 }
 
 TAPAdapter::TAPAdapter()

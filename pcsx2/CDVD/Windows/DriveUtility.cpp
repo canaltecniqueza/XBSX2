@@ -18,6 +18,7 @@
 
 std::vector<std::string> GetOpticalDriveList()
 {
+#ifndef _UWP
 	DWORD size = GetLogicalDriveStringsA(0, nullptr);
 	std::vector<char> drive_strings(size);
 	if (GetLogicalDriveStringsA(size, drive_strings.data()) != size - 1)
@@ -32,6 +33,9 @@ std::vector<std::string> GetOpticalDriveList()
 			++p;
 	}
 	return drives;
+#else
+	return {};
+#endif
 }
 
 void GetValidDrive(std::string& drive)

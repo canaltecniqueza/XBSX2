@@ -131,14 +131,22 @@ BOOL CALLBACK cpuinfo_x86_windows_init(PINIT_ONCE init_once, PVOID parameter, PV
 		x86_processor.topology.thread_bits_offset + x86_processor.topology.thread_bits_length,
 		x86_processor.topology.core_bits_offset + x86_processor.topology.core_bits_length);
 
+#ifndef _UWP
 	/* WINE doesn't implement GetMaximumProcessorGroupCount and aborts when calling it */
 	const uint32_t max_group_count = is_wine ? 1 : (uint32_t) GetMaximumProcessorGroupCount();
+#else
+	const uint32_t max_group_count = 1;
+#endif
 	cpuinfo_log_debug("detected %"PRIu32" processor groups", max_group_count);
 
 	uint32_t processors_count = 0;
 	uint32_t* processors_per_group = (uint32_t*) CPUINFO_ALLOCA(max_group_count * sizeof(uint32_t));
 	for (uint32_t i = 0; i < max_group_count; i++) {
+#ifndef _UWP
 		processors_per_group[i] = GetMaximumProcessorCount((WORD) i);
+#else
+		processors_per_group[i] = 64;
+#endif
 		cpuinfo_log_debug("detected %"PRIu32" processors in group %"PRIu32,
 			processors_per_group[i], i);
 		processors_count += processors_per_group[i];

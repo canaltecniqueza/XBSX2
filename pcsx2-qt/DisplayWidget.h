@@ -75,10 +75,7 @@ public:
 	DisplayContainer();
 	~DisplayContainer();
 
-	// Wayland is broken in lots of ways, so we need to check for it.
-	static bool isRunningOnWayland();
-
-	static bool isNeeded(bool fullscreen, bool render_to_main);
+	static bool IsNeeded(bool fullscreen, bool render_to_main);
 
 	void setDisplayWidget(DisplayWidget* widget);
 	DisplayWidget* removeDisplayWidget();

@@ -79,22 +79,12 @@ public:
 	explicit MainWindow(const QString& unthemed_style_name);
 	~MainWindow();
 
-	/// Sets application theme according to settings.
-	static void updateApplicationTheme();
-
 	void initialize();
 	void connectVMThreadSignals(EmuThread* thread);
 	void startupUpdateCheck();
 
 	/// Locks the VM by pausing it, while a popup dialog is displayed.
 	VMLock pauseAndLockVM();
-
-	/// Accessors for the status bar widgets, updated by the emulation thread.
-	__fi QLabel* getStatusVerboseWidget() const { return m_status_verbose_widget; }
-	__fi QLabel* getStatusRendererWidget() const { return m_status_renderer_widget; }
-	__fi QLabel* getStatusResolutionWidget() const { return m_status_resolution_widget; }
-	__fi QLabel* getStatusFPSWidget() const { return m_status_fps_widget; }
-	__fi QLabel* getStatusVPSWidget() const { return m_status_vps_widget; }
 
 public Q_SLOTS:
 	void checkForUpdates(bool display_message);
@@ -146,7 +136,8 @@ private Q_SLOTS:
 	void onAboutActionTriggered();
 	void onCheckForUpdatesActionTriggered();
 	void onToolsOpenDataDirectoryTriggered();
-	void updateTheme();
+	void onThemeChanged();
+	void onThemeChangedFromSettings();
 	void onLoggingOptionChanged();
 	void onScreenshotActionTriggered();
 	void onSaveGSDumpActionTriggered();
@@ -165,6 +156,7 @@ private Q_SLOTS:
 	void onVMStopped();
 
 	void onGameChanged(const QString& path, const QString& serial, const QString& name, quint32 crc);
+	void onPerformanceMetricsUpdated(const QString& fps_stat, const QString& gs_stat);
 
 	void recreate();
 
@@ -180,11 +172,10 @@ private:
 		NUM_SAVE_STATE_SLOTS = 10,
 	};
 
-	static void setStyleFromSettings();
-	static void setIconThemeFromStyle();
-
 	void setupAdditionalUi();
 	void connectSignals();
+	void setStyleFromSettings();
+	void setIconThemeFromStyle();
 
 	void saveStateToConfig();
 	void restoreStateFromConfig();
@@ -200,16 +191,13 @@ private:
 	bool isRenderingFullscreen() const;
 	bool isRenderingToMain() const;
 	bool shouldHideMouseCursor() const;
-	bool shouldHideMainWindow() const;
 	void switchToGameListView();
 	void switchToEmulationView();
 
-	QWidget* getContentParent();
 	QWidget* getDisplayContainer() const;
 	void saveDisplayWindowGeometryToConfig();
 	void restoreDisplayWindowGeometryFromConfig();
-	void createDisplayWidget(bool fullscreen, bool render_to_main, bool is_exclusive_fullscreen);
-	void destroyDisplayWidget(bool show_game_list);
+	void destroyDisplayWidget();
 	void setDisplayFullscreen(const std::string& fullscreen_mode);
 
 	SettingsDialog* getSettingsDialog();
@@ -246,17 +234,15 @@ private:
 	AutoUpdaterDialog* m_auto_updater_dialog = nullptr;
 
 	QProgressBar* m_status_progress_widget = nullptr;
-	QLabel* m_status_verbose_widget = nullptr;
-	QLabel* m_status_renderer_widget = nullptr;
+	QLabel* m_status_gs_widget = nullptr;
 	QLabel* m_status_fps_widget = nullptr;
-	QLabel* m_status_vps_widget = nullptr;
-	QLabel* m_status_resolution_widget = nullptr;
 
 	QString m_current_disc_path;
 	QString m_current_game_serial;
 	QString m_current_game_name;
 	quint32 m_current_game_crc;
 
+	bool m_display_created = false;
 	bool m_save_states_invalidated = false;
 	bool m_was_paused_on_surface_loss = false;
 	bool m_was_disc_change_request = false;

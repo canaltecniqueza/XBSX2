@@ -40,6 +40,7 @@ bool FlatFileReader::Open(std::string fileName)
 	if (shareWrite)
 		shareMode |= FILE_SHARE_WRITE;
 
+#ifndef _UWP
 	hOverlappedFile = CreateFile(
 		StringUtil::UTF8StringToWideString(m_filename).c_str(),
 		GENERIC_READ,
@@ -48,6 +49,16 @@ bool FlatFileReader::Open(std::string fileName)
 		OPEN_EXISTING,
 		FILE_FLAG_SEQUENTIAL_SCAN | FILE_FLAG_OVERLAPPED,
 		NULL);
+#else
+	hOverlappedFile = CreateFileFromAppW(
+		StringUtil::UTF8StringToWideString(m_filename).c_str(),
+		GENERIC_READ,
+		shareMode,
+		NULL,
+		OPEN_EXISTING,
+		FILE_FLAG_SEQUENTIAL_SCAN | FILE_FLAG_OVERLAPPED,
+		NULL);
+#endif
 
 	return hOverlappedFile != INVALID_HANDLE_VALUE;
 }
@@ -121,7 +132,12 @@ void FlatFileReader::Close(void)
 uint FlatFileReader::GetBlockCount(void) const
 {
 	LARGE_INTEGER fileSize;
+#ifndef _UWP
 	fileSize.LowPart = GetFileSize(hOverlappedFile, (DWORD*)&(fileSize.HighPart));
+#else
+	if (!GetFileSizeEx(hOverlappedFile, &fileSize))
+		return 0;
+#endif
 
 	return (int)(fileSize.QuadPart / m_blocksize);
 }

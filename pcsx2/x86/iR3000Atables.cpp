@@ -608,7 +608,7 @@ void rpsxDIVsuper(int info, int sign, int process = 0)
 	else
 		xMOV(eax, ptr32[&psxRegs.GPR.r[_Rs_]]);
 
-	u8* end1;
+	u8* end1 = nullptr;
 	if (sign) //test for overflow (x86 will just throw an exception)
 	{
 		xCMP(eax, 0x80000000);

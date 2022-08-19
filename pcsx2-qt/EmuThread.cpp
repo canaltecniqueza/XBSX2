@@ -30,6 +30,7 @@
 #include "pcsx2/Counters.h"
 #include "pcsx2/Frontend/InputManager.h"
 #include "pcsx2/Frontend/ImGuiManager.h"
+#include "pcsx2/Frontend/FullscreenUI.h"
 #include "pcsx2/GS.h"
 #include "pcsx2/GS/GS.h"
 #include "pcsx2/GSDumpReplayer.h"
@@ -37,6 +38,7 @@
 #include "pcsx2/HostSettings.h"
 #include "pcsx2/PAD/Host/PAD.h"
 #include "pcsx2/PerformanceMetrics.h"
+#include "pcsx2/Recording/InputRecordingControls.h"
 #include "pcsx2/VMManager.h"
 
 #include "DisplayWidget.h"
@@ -91,6 +93,58 @@ void EmuThread::stopInThread()
 	m_shutdown_flag.store(true);
 }
 
+void EmuThread::startFullscreenUI()
+{
+	if (!isOnEmuThread())
+	{
+		QMetaObject::invokeMethod(this, &EmuThread::startFullscreenUI, Qt::QueuedConnection);
+		return;
+	}
+
+	if (VMManager::HasValidVM())
+		return;
+
+	// we want settings loaded so we choose the correct renderer
+	// this also sorts out input sources.
+	loadOurSettings();
+	loadOurInitialSettings();
+	VMManager::LoadSettings();
+	m_run_fullscreen_ui = true;
+
+	if (!GetMTGS().WaitForOpen())
+	{
+		m_run_fullscreen_ui = false;
+		return;
+	}
+
+	// poll more frequently so we don't lose events
+	stopBackgroundControllerPollTimer();
+	startBackgroundControllerPollTimer();
+}
+
+void EmuThread::stopFullscreenUI()
+{
+	if (!isOnEmuThread())
+	{
+		QMetaObject::invokeMethod(this, &EmuThread::stopFullscreenUI, Qt::QueuedConnection);
+
+		// wait until the host display is gone
+		while (s_host_display)
+			QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
+
+		return;
+	}
+
+	if (VMManager::HasValidVM())
+		destroyVM();
+
+	if (!s_host_display)
+		return;
+
+	m_run_fullscreen_ui = false;
+	GetMTGS().WaitForClose();
+}
+
 void EmuThread::startVM(std::shared_ptr<VMBootParameters> boot_params)
 {
 	if (!isOnEmuThread())
@@ -102,14 +156,13 @@ void EmuThread::startVM(std::shared_ptr<VMBootParameters> boot_params)
 
 	pxAssertRel(!VMManager::HasValidVM(), "VM is shut down");
 	loadOurSettings();
+	loadOurInitialSettings();
+
+	if (boot_params->fullscreen.has_value())
+		m_is_fullscreen = boot_params->fullscreen.value();
 
 	emit onVMStarting();
 
-	// create the display, this may take a while...
-	m_is_fullscreen = boot_params->fullscreen.value_or(Host::GetBaseBoolSettingValue("UI", "StartFullscreen", false));
-	m_is_rendering_to_main = shouldRenderToMain();
-	m_is_surfaceless = false;
-	m_save_state_on_shutdown = false;
 	if (!VMManager::Initialize(*boot_params))
 		return;
 
@@ -146,6 +199,10 @@ void EmuThread::setVMPaused(bool paused)
 		QMetaObject::invokeMethod(this, "setVMPaused", Qt::QueuedConnection, Q_ARG(bool, paused));
 		return;
 	}
+
+	// if we were surfaceless (view->game list, system->unpause), get our display widget back
+	if (!paused && m_is_surfaceless)
+		setSurfaceless(false);
 
 	VMManager::SetPaused(paused);
 }
@@ -327,7 +384,9 @@ void EmuThread::startBackgroundControllerPollTimer()
 	if (m_background_controller_polling_timer->isActive())
 		return;
 
-	m_background_controller_polling_timer->start(BACKGROUND_CONTROLLER_POLLING_INTERVAL);
+	m_background_controller_polling_timer->start(FullscreenUI::IsInitialized() ?
+													 FULLSCREEN_UI_CONTROLLER_POLLING_INTERVAL :
+                                                     BACKGROUND_CONTROLLER_POLLING_INTERVAL);
 }
 
 void EmuThread::stopBackgroundControllerPollTimer()
@@ -362,7 +421,7 @@ void EmuThread::setFullscreen(bool fullscreen)
 		return;
 	}
 
-	if (!VMManager::HasValidVM() || m_is_fullscreen == fullscreen)
+	if (!GetMTGS().IsOpen() || m_is_fullscreen == fullscreen)
 		return;
 
 	// This will call back to us on the MTGS thread.
@@ -382,7 +441,7 @@ void EmuThread::setSurfaceless(bool surfaceless)
 		return;
 	}
 
-	if (!VMManager::HasValidVM() || m_is_surfaceless == surfaceless)
+	if (!GetMTGS().IsOpen() || m_is_surfaceless == surfaceless)
 		return;
 
 	// This will call back to us on the MTGS thread.
@@ -441,13 +500,21 @@ void EmuThread::connectSignals()
 	connect(qApp, &QGuiApplication::applicationStateChanged, this, &EmuThread::onApplicationStateChanged);
 }
 
+void EmuThread::loadOurInitialSettings()
+{
+	m_is_fullscreen = Host::GetBaseBoolSettingValue("UI", "StartFullscreen", false);
+	m_is_rendering_to_main = !Host::GetBaseBoolSettingValue("UI", "RenderToSeparateWindow", false);
+	m_is_surfaceless = false;
+	m_save_state_on_shutdown = false;
+}
+
 void EmuThread::checkForSettingChanges()
 {
 	QMetaObject::invokeMethod(g_main_window, &MainWindow::checkForSettingChanges, Qt::QueuedConnection);
 
 	if (VMManager::HasValidVM())
 	{
-		const bool render_to_main = shouldRenderToMain();
+		const bool render_to_main = !Host::GetBaseBoolSettingValue("UI", "RenderToSeparateWindow", false);
 		if (!m_is_fullscreen && m_is_rendering_to_main != render_to_main)
 		{
 			m_is_rendering_to_main = render_to_main;
@@ -462,11 +529,6 @@ void EmuThread::checkForSettingChanges()
 
 	if (m_verbose_status != last_verbose_status)
 		updatePerformanceMetrics(true);
-}
-
-bool EmuThread::shouldRenderToMain() const
-{
-	return !Host::GetBaseBoolSettingValue("UI", "RenderToSeparateWindow", false) && !QtHost::InNoGUIMode();
 }
 
 void EmuThread::toggleSoftwareRendering()
@@ -737,6 +799,14 @@ HostDisplay* EmuThread::acquireHostDisplay(HostDisplay::RenderAPI api)
 	Console.WriteLn(Color_StrongGreen, "%s Graphics Driver Info:", HostDisplay::RenderAPIToString(s_host_display->GetRenderAPI()));
 	Console.Indent().WriteLn(s_host_display->GetDriverInfo());
 
+	if (m_run_fullscreen_ui && !FullscreenUI::Initialize())
+	{
+		Console.Error("Failed to initialize fullscreen UI");
+		releaseHostDisplay();
+		m_run_fullscreen_ui = false;
+		return nullptr;
+	}
+
 	return s_host_display.get();
 }
 
@@ -781,6 +851,7 @@ void Host::EndPresentFrame()
 	if (GSDumpReplayer::IsReplayingDump())
 		GSDumpReplayer::RenderUI();
 
+	FullscreenUI::Render();
 	ImGuiManager::RenderOSD();
 	s_host_display->EndPresent();
 	ImGuiManager::NewFrame();
@@ -839,11 +910,6 @@ void Host::OnVMResumed()
 	// exit the event loop when we eventually return
 	g_emu_thread->getEventLoop()->quit();
 	g_emu_thread->stopBackgroundControllerPollTimer();
-
-	// if we were surfaceless (view->game list, system->unpause), get our display widget back
-	if (g_emu_thread->isSurfaceless())
-		g_emu_thread->setSurfaceless(false);
-
 	emit g_emu_thread->onVMResumed();
 }
 
@@ -856,12 +922,15 @@ void Host::OnGameChanged(const std::string& disc_path, const std::string& game_s
 
 void EmuThread::updatePerformanceMetrics(bool force)
 {
+	QString fps_stat, gs_stat;
+	bool changed = force;
+
 	if (m_verbose_status && VMManager::HasValidVM())
 	{
 		std::string gs_stat_str;
 		GSgetTitleStats(gs_stat_str);
+		changed = true;
 
-		QString gs_stat;
 		if (THREAD_VU1)
 		{
 			gs_stat =
@@ -878,11 +947,8 @@ void EmuThread::updatePerformanceMetrics(bool force)
 						  .arg(PerformanceMetrics::GetCPUThreadUsage(), 0, 'f', 0)
 						  .arg(PerformanceMetrics::GetGSThreadUsage(), 0, 'f', 0);
 		}
-
-		QMetaObject::invokeMethod(g_main_window->getStatusVerboseWidget(), "setText", Qt::QueuedConnection, Q_ARG(const QString&, gs_stat));
 	}
 
-	const GSRendererType renderer = GSConfig.Renderer;
 	const float speed = std::round(PerformanceMetrics::GetSpeed());
 	const float gfps = std::round(PerformanceMetrics::GetInternalFPS());
 	const float vfps = std::round(PerformanceMetrics::GetFPS());
@@ -891,56 +957,41 @@ void EmuThread::updatePerformanceMetrics(bool force)
 
 	if (iwidth != m_last_internal_width || iheight != m_last_internal_height ||
 		speed != m_last_speed || gfps != m_last_game_fps || vfps != m_last_video_fps ||
-		renderer != m_last_renderer || force)
+		changed)
 	{
+		m_last_internal_width = iwidth;
+		m_last_internal_height = iheight;
+		m_last_speed = speed;
+		m_last_game_fps = gfps;
+		m_last_video_fps = vfps;
+		changed = true;
+
 		if (iwidth == 0 && iheight == 0)
 		{
 			// if we don't have width/height yet, we're not going to have fps either.
 			// and we'll probably be <100% due to compiling. so just leave it blank for now.
-			QString blank;
-			QMetaObject::invokeMethod(g_main_window->getStatusRendererWidget(), "setText", Qt::QueuedConnection, Q_ARG(const QString&, blank));
-			QMetaObject::invokeMethod(g_main_window->getStatusResolutionWidget(), "setText", Qt::QueuedConnection, Q_ARG(const QString&, blank));
-			QMetaObject::invokeMethod(g_main_window->getStatusFPSWidget(), "setText", Qt::QueuedConnection, Q_ARG(const QString&, blank));
-			QMetaObject::invokeMethod(g_main_window->getStatusVPSWidget(), "setText", Qt::QueuedConnection, Q_ARG(const QString&, blank));
-			return;
+		}
+		else if (PerformanceMetrics::IsInternalFPSValid())
+		{
+			fps_stat = QStringLiteral("%1x%2 | G: %3 | V: %4 | %5%")
+						   .arg(iwidth)
+						   .arg(iheight)
+						   .arg(gfps, 0, 'f', 0)
+						   .arg(vfps, 0, 'f', 0)
+						   .arg(speed, 0, 'f', 0);
 		}
 		else
 		{
-			if (renderer != m_last_renderer || force)
-			{
-				QMetaObject::invokeMethod(g_main_window->getStatusRendererWidget(), "setText", Qt::QueuedConnection,
-					Q_ARG(const QString&, QString::fromUtf8(Pcsx2Config::GSOptions::GetRendererName(renderer))));
-				m_last_renderer = renderer;
-			}
-			if (iwidth != m_last_internal_width || iheight != m_last_internal_height || force)
-			{
-				QMetaObject::invokeMethod(g_main_window->getStatusResolutionWidget(), "setText", Qt::QueuedConnection,
-					Q_ARG(const QString&, tr("%1x%2")
-											  .arg(iwidth)
-											  .arg(iheight)));
-				m_last_internal_width = iwidth;
-				m_last_internal_height = iheight;
-			}
-
-			if (gfps != m_last_game_fps || force)
-			{
-				QMetaObject::invokeMethod(g_main_window->getStatusFPSWidget(), "setText", Qt::QueuedConnection,
-					Q_ARG(const QString&, tr("Game: %1 FPS")
-											  .arg(gfps, 0, 'f', 0)));
-				m_last_game_fps = gfps;
-			}
-
-			if (speed != m_last_speed || vfps != m_last_video_fps || force)
-			{
-				QMetaObject::invokeMethod(g_main_window->getStatusVPSWidget(), "setText", Qt::QueuedConnection,
-					Q_ARG(const QString&, tr("Video: %1 FPS (%2%)")
-											  .arg(vfps, 0, 'f', 0)
-											  .arg(speed, 0, 'f', 0)));
-				m_last_speed = speed;
-				m_last_video_fps = vfps;
-			}
+			fps_stat = QStringLiteral("%1x%2 | V: %3 | %4%")
+						   .arg(iwidth)
+						   .arg(iheight)
+						   .arg(vfps, 0, 'f', 0)
+						   .arg(speed, 0, 'f', 0);
 		}
 	}
+
+	if (changed)
+		emit onPerformanceMetricsUpdated(fps_stat, gs_stat);
 }
 
 void Host::OnPerformanceMetricsUpdated()
@@ -1001,14 +1052,10 @@ void Host::RequestExit(bool save_state_if_running)
 	QMetaObject::invokeMethod(g_main_window, "requestExit", Qt::QueuedConnection);
 }
 
-void Host::RequestVMShutdown(bool allow_confirm, bool allow_save_state)
+void Host::RequestVMShutdown(bool save_state)
 {
-	if (!VMManager::HasValidVM())
-		return;
-
-	// Run it on the host thread, that way we get the confirm prompt (if enabled).
-	QMetaObject::invokeMethod(g_main_window, "requestShutdown", Qt::QueuedConnection,
-		Q_ARG(bool, allow_confirm), Q_ARG(bool, allow_save_state), Q_ARG(bool, false));
+	if (VMManager::HasValidVM())
+		g_emu_thread->shutdownVM(save_state);
 }
 
 bool Host::IsFullscreen()
@@ -1033,4 +1080,27 @@ SysMtgsThread& GetMTGS()
 // ------------------------------------------------------------------------
 
 BEGIN_HOTKEY_LIST(g_host_hotkeys)
+DEFINE_HOTKEY("ShutdownVM", "System", "Shut Down Virtual Machine", [](s32 pressed) {
+	if (!pressed)
+	{
+		// run it on the host thread, that way we get the confirm prompt (if enabled)
+		QMetaObject::invokeMethod(g_main_window, "requestShutdown", Qt::QueuedConnection,
+			Q_ARG(bool, true), Q_ARG(bool, true), Q_ARG(bool, true));
+	}
+})
+DEFINE_HOTKEY("TogglePause", "System", "Toggle Pause", [](s32 pressed) {
+	if (!pressed)
+		g_emu_thread->setVMPaused(VMManager::GetState() != VMState::Paused);
+})
+DEFINE_HOTKEY("ToggleFullscreen", "General", "Toggle Fullscreen", [](s32 pressed) {
+	if (!pressed)
+		g_emu_thread->toggleFullscreen();
+})
+// Input Recording Hot Keys
+DEFINE_HOTKEY("InputRecToggleMode", "Input Recording", "Toggle Recording Mode", [](s32 pressed) {
+	if (!pressed) // ?? - not pressed so it is on key up?
+	{
+		g_InputRecordingControls.RecordModeToggle();
+	}
+})
 END_HOTKEY_LIST()

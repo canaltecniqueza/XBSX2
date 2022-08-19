@@ -249,7 +249,12 @@ namespace vtlb_private
 // If it were smaller than a page we'd end up allowing execution rights on some
 // other vars additionally (bad!).
 //
-alignas(__pagesize) static u8 m_IndirectDispatchers[__pagesize];
+static constexpr u32 INDIRECT_DISPATCHERS_SIZE = __pagesize;
+#ifndef _UWP
+alignas(__pagesize) static u8 m_IndirectDispatchers[INDIRECT_DISPATCHERS_SIZE];
+#else
+u8* m_IndirectDispatchers = nullptr;
+#endif
 
 // ------------------------------------------------------------------------
 // mode        - 0 for read, 1 for write!
@@ -345,11 +350,20 @@ void vtlb_dynarec_init()
 		return;
 	hasBeenCalled = true;
 
+#ifndef _UWP
 	// In case init gets called multiple times:
 	HostSys::MemProtectStatic(m_IndirectDispatchers, PageAccess_ReadWrite());
+#else
+	// The vtlb handlers are bump allocated, so it's at the very end of our memory area.
+	// So, we'll put the exception handler right after them.
+	static constexpr u32 CODE_BUFFER_SIZE = INDIRECT_DISPATCHERS_SIZE + UWP_JIT_EXCEPTION_HANDLER_SIZE;
+	m_IndirectDispatchers = static_cast<u8*>(GetVmMemory().BumpAllocator().Alloc(CODE_BUFFER_SIZE));
+	pxAssertRel(m_IndirectDispatchers, "Indirect dispatchers not allocated");
+	HostSys::MmapCommitPtr(m_IndirectDispatchers, CODE_BUFFER_SIZE, PageAccess_ReadWrite());
+#endif
 
 	// clear the buffer to 0xcc (easier debugging).
-	memset(m_IndirectDispatchers, 0xcc, __pagesize);
+	memset(m_IndirectDispatchers, 0xcc, INDIRECT_DISPATCHERS_SIZE);
 
 	for (int mode = 0; mode < 2; ++mode)
 	{
@@ -364,9 +378,15 @@ void vtlb_dynarec_init()
 		}
 	}
 
+#ifndef _UWP
 	HostSys::MemProtectStatic(m_IndirectDispatchers, PageAccess_ExecOnly());
-
-	Perf::any.map((uptr)m_IndirectDispatchers, __pagesize, "TLB Dispatcher");
+#else
+	HostSys::MemProtect(m_IndirectDispatchers, CODE_BUFFER_SIZE, PageAccess_ExecOnly());
+	UWPInstallExceptionHandlerForJIT(GetVmMemory().MainMemory()->GetBase(),
+		static_cast<size_t>((m_IndirectDispatchers + INDIRECT_DISPATCHERS_SIZE) -
+							static_cast<u8*>(GetVmMemory().MainMemory()->GetBase())),
+		m_IndirectDispatchers + INDIRECT_DISPATCHERS_SIZE);
+#endif
 }
 
 static void vtlb_SetWriteback(u32* writeback)

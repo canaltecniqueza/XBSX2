@@ -19,11 +19,46 @@
 #include "common/Assertions.h"
 #include "common/emitter/tools.h"
 #include "common/RedtapeWindows.h"
+#include "common/Timer.h"
 #include <process.h>
+
+#ifdef _UWP
+static thread_local HANDLE s_waitable_timer;
+#endif
 
 __fi void Threading::Sleep(int ms)
 {
+#if 1
 	::Sleep(ms);
+#else
+	if (ms == 0)
+	{
+		SwitchToThread();
+		return;
+	}
+
+	// Use a high resolution waitable timer on UWP, because we can't use timeBeginPeriod().
+	// TODO: This doesn't work on xbox...
+	if (!s_waitable_timer)
+	{
+		s_waitable_timer = CreateWaitableTimerEx(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+		if (!s_waitable_timer)
+			return;
+	}
+
+	FILETIME ft;
+	GetSystemTimeAsFileTime(&ft);
+
+	LARGE_INTEGER fti;
+	std::memcpy(&fti, &ft, sizeof(fti));
+	fti.QuadPart += Common::Timer::ConvertMillisecondsToValue(ms);
+
+	if (SetWaitableTimer(s_waitable_timer, &fti, 0, nullptr, nullptr, FALSE))
+	{
+		WaitForSingleObject(s_waitable_timer, INFINITE);
+		return;
+	}
+#endif
 }
 
 __fi void Threading::Timeslice()
@@ -46,13 +81,27 @@ __fi void Threading::EnableHiresScheduler()
 
 	// (note: this same trick is used by most multimedia software and games)
 
+#ifndef _UWP
 	timeBeginPeriod(1);
+#endif
 }
 
 __fi void Threading::DisableHiresScheduler()
 {
+#ifndef _UWP
 	timeEndPeriod(1);
+#endif
 }
+
+#ifdef _UWP
+// This hacky union would probably fail on some cpu platforms if the contents of FILETIME aren't
+// packed (but for any x86 CPU and microsoft compiler, they will be).
+union FileTimeSucks
+{
+	FILETIME filetime;
+	u64 u64time;
+};
+#endif
 
 Threading::ThreadHandle::ThreadHandle() = default;
 
@@ -118,10 +167,17 @@ Threading::ThreadHandle& Threading::ThreadHandle::operator=(const ThreadHandle& 
 
 u64 Threading::ThreadHandle::GetCPUTime() const
 {
+#ifndef _UWP
 	u64 ret = 0;
 	if (m_native_handle)
 		QueryThreadCycleTime((HANDLE)m_native_handle, &ret);
 	return ret;
+#else
+	FileTimeSucks user = {}, kernel = {};
+	FILETIME dummy;
+	GetThreadTimes((HANDLE)m_native_handle, &dummy, &dummy, &kernel.filetime, &user.filetime);
+	return user.u64time + kernel.u64time;
+#endif
 }
 
 bool Threading::ThreadHandle::SetAffinity(u64 processor_mask) const
@@ -209,19 +265,30 @@ Threading::ThreadHandle& Threading::Thread::operator=(Thread&& thread)
 
 u64 Threading::GetThreadCpuTime()
 {
+#ifndef _UWP
 	u64 ret = 0;
 	QueryThreadCycleTime(GetCurrentThread(), &ret);
 	return ret;
+#else
+	FileTimeSucks user = {}, kernel = {};
+	FILETIME dummy;
+	GetThreadTimes(GetCurrentThread(), &dummy, &dummy, &kernel.filetime, &user.filetime);
+	return user.u64time + kernel.u64time;
+#endif
 }
 
 u64 Threading::GetThreadTicksPerSecond()
 {
+#ifndef _UWP
 	// On x86, despite what the MS documentation says, this basically appears to be rdtsc.
 	// So, the frequency is our base clock speed (and stable regardless of power management).
 	static u64 frequency = 0;
 	if (unlikely(frequency == 0))
 		frequency = x86caps.CachedMHz() * u64(1000000);
 	return frequency;
+#else
+	return 10000000;
+#endif
 }
 
 void Threading::SetNameOfCurrentThread(const char* name)

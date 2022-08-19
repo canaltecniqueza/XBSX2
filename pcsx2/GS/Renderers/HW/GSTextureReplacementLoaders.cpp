@@ -483,32 +483,24 @@ static bool ParseDDSHeader(std::FILE* fp, DDSLoadInfo* info)
 			info->format = GSTexture::Format::BC1;
 			info->block_size = 4;
 			info->bytes_per_block = 8;
-			if (!features.dxt_textures)
-				return false;
 		}
 		else if (header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '2') || header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '3') || dxt10_format == 74)
 		{
 			info->format = GSTexture::Format::BC2;
 			info->block_size = 4;
 			info->bytes_per_block = 16;
-			if (!features.dxt_textures)
-				return false;
 		}
 		else if (header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '4') || header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '5') || dxt10_format == 77)
 		{
 			info->format = GSTexture::Format::BC3;
 			info->block_size = 4;
 			info->bytes_per_block = 16;
-			if (!features.dxt_textures)
-				return false;
 		}
 		else if (dxt10_format == 98)
 		{
 			info->format = GSTexture::Format::BC7;
 			info->block_size = 4;
 			info->bytes_per_block = 16;
-			if (!features.bptc_textures)
-				return false;
 		}
 		else
 		{

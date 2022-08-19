@@ -318,5 +318,15 @@ extern long __stdcall SysPageFaultExceptionFilter(struct _EXCEPTION_POINTERS* ep
 extern void pxInstallSignalHandler();
 extern void _platform_InstallSignalHandler();
 
+#ifdef _UWP
+// For UWP, we can't use vectored exception handling. So, instead, we abuse the stack unwinding
+// and set up an exception handler in the function table for the entire JIT space. Because pointers
+// in said function table are relative, we have to put it the table at the end of the JIT space
+// allocation.
+
+static constexpr u32 UWP_JIT_EXCEPTION_HANDLER_SIZE = 4096;
+extern bool UWPInstallExceptionHandlerForJIT(void* start_pc, size_t code_size, void* unwind_handler);
+#endif
+
 extern SrcType_PageFault* Source_PageFault;
 extern std::mutex PageFault_Mutex;

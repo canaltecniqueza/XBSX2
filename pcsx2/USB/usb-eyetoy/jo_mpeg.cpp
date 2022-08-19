@@ -148,7 +148,8 @@ static int jo_processDU(jo_bits_t *bits, float A[64], const unsigned char htdc[9
 	for(; (endpos>0)&&(Q[endpos]==0); --endpos) { /* do nothing */ }
 	for(int i = 1; i <= endpos;) {
 		int run = 0;
-		while (i < endpos && Q[i] == 0) {
+		while (i < endpos && Q[i] == 0)
+			{
 			++run;
 			++i;
 		}

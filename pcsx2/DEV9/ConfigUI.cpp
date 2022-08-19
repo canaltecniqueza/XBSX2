@@ -424,6 +424,7 @@ void DEV9configure()
 		if (!Path::IsAbsolute(hddPath))
 			hddPath = Path::Combine(EmuFolders::Settings, hddPath);
 
+
 		if (g_Conf->EmuOptions.DEV9.HddEnable && !FileSystem::FileExists(hddPath.c_str()))
 		{
 			HddCreateWx hddCreator;

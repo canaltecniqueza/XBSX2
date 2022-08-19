@@ -13,5 +13,13 @@
       <Configuration>Release AVX2</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug UWP AVX2|x64">
+      <Configuration>Debug UWP AVX2</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release UWP AVX2|x64">
+      <Configuration>Release UWP AVX2</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
   </ItemGroup>
 </Project>

@@ -57,6 +57,7 @@ std::string GetOSVersionString()
 {
 	std::string retval;
 
+#ifndef _UWP
 	SYSTEM_INFO si;
 	GetNativeSystemInfo(&si);
 
@@ -73,6 +74,9 @@ std::string GetOSVersionString()
 		else // IsWindows8Point1OrGreater()
 			retval += IsWindowsServer() ? "Windows Server 2012 R2" : "Windows 8.1";
 	}
+#else
+	retval = "Universal Windows Platform";
+#endif
 
 	return retval;
 }
@@ -111,9 +115,11 @@ std::string Exception::WinApiError::FormatDiagnosticMessage() const
 
 void ScreensaverAllow(bool allow)
 {
+#ifndef _UWP
 	EXECUTION_STATE flags = ES_CONTINUOUS;
 	if (!allow)
 		flags |= ES_DISPLAY_REQUIRED;
 	SetThreadExecutionState(flags);
+#endif
 }
 #endif

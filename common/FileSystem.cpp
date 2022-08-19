@@ -88,7 +88,7 @@ static inline bool FileSystemCharacterIsSane(char c, bool StripSlashes)
 	return true;
 }
 
-template<typename T>
+template <typename T>
 static inline void PathAppendString(std::string& dst, const T& src)
 {
 	if (dst.capacity() < (dst.length() + src.length()))
@@ -97,7 +97,7 @@ static inline void PathAppendString(std::string& dst, const T& src)
 	bool last_separator = (!dst.empty() && dst.back() == FS_OSPATH_SEPARATOR_CHARACTER);
 
 	size_t index = 0;
-	
+
 #ifdef _WIN32
 	// special case for UNC paths here
 	if (dst.empty() && src.length() >= 3 && src[0] == '\\' && src[1] == '\\' && src[2] != '\\')
@@ -170,7 +170,8 @@ bool Path::IsAbsolute(const std::string_view& path)
 {
 #ifdef _WIN32
 	return (path.length() >= 3 && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) &&
-			path[1] == ':' && (path[2] == '/' || path[2] == '\\')) || (path.length() >= 3 && path[0] == '\\' && path[1] == '\\');
+			   path[1] == ':' && (path[2] == '/' || path[2] == '\\')) ||
+		   (path.length() >= 3 && path[0] == '\\' && path[1] == '\\');
 #else
 	return (path.length() >= 1 && path[0] == '/');
 #endif
@@ -180,7 +181,7 @@ std::string Path::ToNativePath(const std::string_view& path)
 {
 	std::string ret;
 	PathAppendString(ret, path);
-	
+
 	// remove trailing slashes
 	if (ret.length() > 1)
 	{
@@ -1291,7 +1292,7 @@ bool FileSystem::StatFile(const char* path, FILESYSTEM_STAT_DATA* sd)
 	return true;
 #else
 	WIN32_FILE_ATTRIBUTE_DATA fad;
-	if (!GetFileAttributesExFromAppW(wpath, GetFileExInfoStandard, &fad))
+	if (!GetFileAttributesExFromAppW(wpath.c_str(), GetFileExInfoStandard, &fad))
 		return false;
 
 	sd->Attributes = TranslateWin32Attributes(fad.dwFileAttributes);
@@ -1528,14 +1529,14 @@ bool FileSystem::RenamePath(const char* old_path, const char* new_path)
 	{
 		if (!DeleteFileFromAppW(new_wpath.c_str()))
 		{
-			Log_ErrorPrintf("DeleteFileFromAppW('%s') failed: %08X", new_wpath.c_str(), GetLastError());
+			Console.Error("DeleteFileFromAppW('%s') failed: %08X", new_wpath.c_str(), GetLastError());
 			return false;
 		}
 	}
 
 	if (!MoveFileFromAppW(old_wpath.c_str(), new_wpath.c_str()))
 	{
-		Log_ErrorPrintf("MoveFileFromAppW('%s', '%s') failed: %08X", old_path, new_path, GetLastError());
+		Console.Error("MoveFileFromAppW('%s', '%s') failed: %08X", old_path, new_path, GetLastError());
 		return false;
 	}
 #endif
@@ -1615,6 +1616,7 @@ bool FileSystem::SetPathCompression(const char* path, bool enable)
 	const bool isFile = !(attrs & FILE_ATTRIBUTE_DIRECTORY);
 	const DWORD flags = isFile ? FILE_ATTRIBUTE_NORMAL : (FILE_FLAG_BACKUP_SEMANTICS | FILE_ATTRIBUTE_DIRECTORY);
 
+#ifndef _UWP
 	const HANDLE handle = CreateFileW(wpath.c_str(),
 		FILE_GENERIC_WRITE | FILE_GENERIC_READ,
 		FILE_SHARE_READ | FILE_SHARE_DELETE,
@@ -1622,6 +1624,16 @@ bool FileSystem::SetPathCompression(const char* path, bool enable)
 		OPEN_EXISTING,
 		flags,
 		nullptr);
+#else
+	const HANDLE handle = CreateFileFromAppW(wpath.c_str(),
+		FILE_GENERIC_WRITE | FILE_GENERIC_READ,
+		FILE_SHARE_READ | FILE_SHARE_DELETE,
+		nullptr,
+		OPEN_EXISTING,
+		flags,
+		nullptr);
+#endif
+
 	if (handle == INVALID_HANDLE_VALUE)
 		return false;
 

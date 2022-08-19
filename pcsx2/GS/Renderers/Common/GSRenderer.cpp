@@ -443,7 +443,7 @@ static GSVector4 CalculateDrawDstRect(s32 window_width, s32 window_height, const
 		targetAr = 16.0f / 9.0f;
 
 	const float crop_adjust = (static_cast<float>(src_rect.width()) / static_cast<float>(src_size.x)) /
-		(static_cast<float>(src_rect.height()) / static_cast<float>(src_size.y));
+							  (static_cast<float>(src_rect.height()) / static_cast<float>(src_size.y));
 
 	const double arr = (targetAr * crop_adjust) / clientAr;
 	float target_width = f_width;
@@ -625,7 +625,7 @@ void GSRenderer::VSync(u32 field, bool registers_written)
 			const GSVector4 draw_rect(CalculateDrawDstRect(display->GetWindowWidth(), display->GetWindowHeight(),
 				src_rect, current->GetSize(), display->GetDisplayAlignment(), display->UsesLowerLeftOrigin(),
 				GetVideoMode() == GSVideoMode::SDTV_480P || (GSConfig.PCRTCOverscan && GSConfig.PCRTCOffsets)));
-
+			
 			const u64 current_time = Common::Timer::GetCurrentValue();
 			const float shader_time = static_cast<float>(Common::Timer::ConvertValueToSeconds(current_time - m_shader_time_start));
 

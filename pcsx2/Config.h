@@ -199,6 +199,14 @@ enum class GSDumpCompressionMethod : u8
 	Zstandard,
 };
 
+enum class GSHardwareDownloadMode : u8
+{
+	Enabled,
+	NoReadbacks,
+	Unsynchronized,
+	Disabled
+};
+
 // Template function for casting enumerations to their underlying type
 template <typename Enumeration>
 typename std::underlying_type<Enumeration>::type enum_cast(Enumeration E)
@@ -458,7 +466,6 @@ struct Pcsx2Config
 					OsdShowIndicators : 1;
 
 				bool
-					HWDisableReadbacks : 1,
 					AccurateDATE : 1,
 					GPUPaletteConversion : 1,
 					AutoFlushSW : 1,
@@ -502,7 +509,7 @@ struct Pcsx2Config
 		bool SynchronousMTGS{false};
 		bool FrameLimitEnable{true};
 
-		VsyncMode VsyncEnable{VsyncMode::Off};
+		VsyncMode VsyncEnable{VsyncMode::On};
 
 		double LimitScalar{1.0};
 		double FramerateNTSC{59.94};
@@ -530,8 +537,9 @@ struct Pcsx2Config
 		AccBlendLevel AccurateBlendingUnit{AccBlendLevel::Basic};
 		CRCHackLevel CRCHack{CRCHackLevel::Automatic};
 		BiFiltering TextureFiltering{BiFiltering::PS2};
-		TexturePreloadingLevel TexturePreloading{TexturePreloadingLevel::Full};
+		TexturePreloadingLevel TexturePreloading{TexturePreloadingLevel::Off};
 		GSDumpCompressionMethod GSDumpCompression{GSDumpCompressionMethod::LZMA};
+		GSHardwareDownloadMode HWDownloadMode{GSHardwareDownloadMode::Enabled};
 		int Dithering{2};
 		int MaxAnisotropy{0};
 		int SWExtraThreads{2};
@@ -622,7 +630,6 @@ struct Pcsx2Config
 		s32 FinalVolume = 100;
 		s32 Latency{100};
 		s32 SpeakerConfiguration{0};
-		s32 DplDecodingLevel{0};
 
 		double VolumeAdjustC{ 0.0f };
 		double VolumeAdjustFL{ 0.0f };
@@ -649,7 +656,6 @@ struct Pcsx2Config
 				OpEqu(FinalVolume) &&
 				OpEqu(Latency) &&
 				OpEqu(SpeakerConfiguration) &&
-				OpEqu(DplDecodingLevel) &&
 
 				OpEqu(VolumeAdjustC) &&
 				OpEqu(VolumeAdjustFL) &&

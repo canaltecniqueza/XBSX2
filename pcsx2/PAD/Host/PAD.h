@@ -71,48 +71,13 @@ namespace PAD
 		GenericInputBinding generic_mapping;
 	};
 
-	struct ControllerSettingInfo
-	{
-		enum class Type
-		{
-			Boolean,
-			Integer,
-			Float,
-			String,
-			Path,
-		};
-
-		Type type;
-		const char* key;
-		const char* visible_name;
-		const char* description;
-		const char* default_value;
-		const char* min_value;
-		const char* max_value;
-		const char* step_value;
-
-		const char* StringDefaultValue() const;
-		bool BooleanDefaultValue() const;
-		s32 IntegerDefaultValue() const;
-		s32 IntegerMinValue() const;
-		s32 IntegerMaxValue() const;
-		s32 IntegerStepValue() const;
-		float FloatDefaultValue() const;
-		float FloatMinValue() const;
-		float FloatMaxValue() const;
-		float FloatStepValue() const;
-	};
-
-
 	struct ControllerInfo
 	{
-		ControllerType type;
 		const char* name;
 		const char* display_name;
 		const ControllerBindingInfo* bindings;
 		u32 num_bindings;
-		const ControllerSettingInfo* settings;
-		u32 num_settings;
+		ControllerType type;
 		PAD::VibrationCapabilities vibration_caps;
 	};
 
@@ -124,7 +89,7 @@ namespace PAD
 
 	/// Default stick deadzone/sensitivity.
 	static constexpr float DEFAULT_STICK_DEADZONE = 0.0f;
-	static constexpr float DEFAULT_STICK_SCALE = 1.33f;
+	static constexpr float DEFAULT_STICK_SCALE = 1.4f;
 	static constexpr float DEFAULT_MOTOR_SCALE = 1.0f;
 	static constexpr float DEFAULT_PRESSURE_MODIFIER = 0.5f;
 

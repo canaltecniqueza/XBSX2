@@ -272,11 +272,10 @@ bool D3D12HostDisplay::CreateSwapChain(const DXGI_MODE_DESC* fullscreen_mode)
 	if (m_window_info.type != WindowInfo::Type::WinRT)
 		return false;
 
-	ComPtr<IDXGIFactory2> factory2;
-	hr = m_dxgi_factory.As(&factory2);
-	if (FAILED(hr))
+	ComPtr<IDXGIFactory2> factory2 = m_dxgi_factory.try_query<IDXGIFactory2>();
+	if (!factory2)
 	{
-		Console.Error("Failed to get DXGI factory: %08X", hr);
+		Console.Error("Failed to get DXGI factory");
 		return false;
 	}
 
@@ -296,7 +295,7 @@ bool D3D12HostDisplay::CreateSwapChain(const DXGI_MODE_DESC* fullscreen_mode)
 	ComPtr<IDXGISwapChain1> swap_chain1;
 	hr = factory2->CreateSwapChainForCoreWindow(g_d3d12_context->GetCommandQueue(),
 		static_cast<IUnknown*>(m_window_info.window_handle), &swap_chain_desc,
-		nullptr, swap_chain1.GetAddressOf());
+		nullptr, swap_chain1.put());
 	if (FAILED(hr))
 	{
 		Console.Error("CreateSwapChainForCoreWindow failed: 0x%08X", hr);
@@ -392,6 +391,7 @@ static std::string GetDriverVersionFromLUID(const LUID& luid)
 {
 	std::string ret;
 
+#ifndef _UWP
 	HKEY hKey;
 	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\Microsoft\\DirectX"), 0, KEY_READ, &hKey) == ERROR_SUCCESS)
 	{
@@ -427,6 +427,7 @@ static std::string GetDriverVersionFromLUID(const LUID& luid)
 
 		RegCloseKey(hKey);
 	}
+#endif
 
 	return ret;
 }

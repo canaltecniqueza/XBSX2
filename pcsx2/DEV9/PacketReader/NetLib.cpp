@@ -18,7 +18,11 @@
 #include "NetLib.h"
 
 #ifdef _WIN32
+#ifndef _UWP
 #include "winsock.h"
+#else
+#include <WinSock2.h>
+#endif
 #else
 #include <arpa/inet.h>
 #endif

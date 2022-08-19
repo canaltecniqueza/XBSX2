@@ -25,7 +25,7 @@
 #endif
 
 // Qt build requires Windows 10+, WX Windows 8.1+.
-#ifndef _WIN32_WINNT
+#if defined(_WIN32_WINNT) && !defined(_UWP)
 #ifdef PCSX2_CORE
 #define _WIN32_WINNT 0x0A00 // Windows 10
 #else

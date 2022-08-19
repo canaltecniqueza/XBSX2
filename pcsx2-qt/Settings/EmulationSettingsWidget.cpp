@@ -60,23 +60,17 @@ EmulationSettingsWidget::EmulationSettingsWidget(SettingsDialog* dialog, QWidget
 		tr("Sets the fast forward speed. This speed will be used when the fast forward hotkey is pressed/toggled."));
 
 	dialog->registerWidgetHelp(m_ui.slowMotionSpeed, tr("Slow Motion Speed"), tr("User Preference"),
-		tr("Sets the slow motion speed. This speed will be used when the slow motion hotkey is pressed/toggled."));	
+		tr("Sets the slow motion speed. This speed will be used when the slow motion hotkey is pressed/toggled."));
 
-	dialog->registerWidgetHelp(m_ui.speedLimiter, tr("Speed Limiter"), tr("Checked"),
-		tr("Limits the emulation to the appropriate framerate for the currently running game."));
-
-	dialog->registerWidgetHelp(m_ui.syncToHostRefreshRate, tr("Scale To Host Refresh Rate"), tr("Unchecked"),
+	dialog->registerWidgetHelp(m_ui.syncToHostRefreshRate, tr("Sync To Host Refresh Rate"), tr("Unchecked"),
 		tr("Adjusts the emulation speed so the console's refresh rate matches the host's refresh rate when both VSync and "
 		   "Audio Resampling settings are enabled. This results in the smoothest animations possible, at the cost of "
-		   "potentially increasing the emulation speed by less than 1%. Scale To Host Refresh Rate will not take effect if "
+		   "potentially increasing the emulation speed by less than 1%. Sync To Host Refresh Rate will not take effect if "
 		   "the console's refresh rate is too far from the host's refresh rate. Users with variable refresh rate displays "
 		   "should disable this option."));
 
 	dialog->registerWidgetHelp(m_ui.cheats, tr("Enable Cheats"), tr("Unchecked"),
 		tr("Automatically loads and applies cheats on game start."));
-	
-	dialog->registerWidgetHelp(m_ui.hostFilesystem, tr("Enable Host Filesystem"), tr("Unchecked"),
-		tr("Allows games and homebrew to access files / folders directly on the host computer."));
 
 	dialog->registerWidgetHelp(m_ui.widescreenPatches, tr("Enable Widescreen Patches"), tr("Unchecked"),
 		tr("Automatically loads and applies widescreen patches on game start. Can cause issues."));

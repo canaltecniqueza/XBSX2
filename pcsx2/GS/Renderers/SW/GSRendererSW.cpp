@@ -145,12 +145,12 @@ GSTexture* GSRendererSW::GetOutput(int i, int& y_offset)
 		constexpr int pitch = 1024 * 4;
 		const int off_x = DISPFB.DBX & 0x7ff;
 		const int off_y = DISPFB.DBY & 0x7ff;
-		const GSVector4i out_r(0, 0, w, h);
+		bool h_wrap = false;
+		bool w_wrap = false;
 		GSVector4i r(off_x, off_y, w + off_x, h + off_y);
 		GSVector4i rh(off_x, off_y, w + off_x, (h + off_y) & 0x7FF);
 		GSVector4i rw(off_x, off_y, (w + off_x) & 0x7FF, h + off_y);
-		bool h_wrap = false;
-		bool w_wrap = false;
+		GSVector4i out_r(0, 0, w, h);
 
 		// Need to read it in 2 parts, since you can't do a split rect.
 		if (r.bottom >= 2048)
@@ -171,7 +171,6 @@ GSTexture* GSRendererSW::GetOutput(int i, int& y_offset)
 
 		const GSLocalMemory::psm_t& psm = GSLocalMemory::m_psm[DISPFB.PSM];
 
-		// Top left rect
 		(m_mem.*psm.rtx)(m_mem.GetOffset(DISPFB.Block(), DISPFB.FBW, DISPFB.PSM), r.ralign<Align_Outside>(psm.bs), m_output, pitch, m_env.TEXA);
 
 		int top = (h_wrap) ? ((r.bottom - r.top) * pitch) : 0;

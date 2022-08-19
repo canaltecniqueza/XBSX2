@@ -248,14 +248,13 @@ __fi void cpuSetNextEventDelta( s32 delta )
 
 __fi int cpuGetCycles(int interrupt)
 {
-	if(interrupt == VU_MTVU_BUSY && (!THREAD_VU1 || INSTANT_VU1))
+	if (interrupt == VU_MTVU_BUSY && (!THREAD_VU1 || INSTANT_VU1))
 		return 1;
 	else
 	{
 		const int cycles = (cpuRegs.sCycle[interrupt] + cpuRegs.eCycle[interrupt]) - cpuRegs.cycle;
 		return std::max(1, cycles);
 	}
-		
 }
 
 // tests the cpu cycle against the given start and delta values.
@@ -304,7 +303,7 @@ static __fi void _cpuTestInterrupts()
 	}
 	/* These are 'pcsx2 interrupts', they handle asynchronous stuff
 	   that depends on the cycle timings */
-	TESTINT(VU_MTVU_BUSY,	MTVUInterrupt);
+	TESTINT(VU_MTVU_BUSY, MTVUInterrupt);
 	TESTINT(DMAC_VIF1,		vif1Interrupt);
 	TESTINT(DMAC_GIF,		gifInterrupt);
 	TESTINT(DMAC_SIF0,		EEsif0Interrupt);

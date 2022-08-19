@@ -516,6 +516,7 @@ static std::string GetDriverVersionFromLUID(const LUID& luid)
 {
 	std::string ret;
 
+#ifndef _UWP
 	HKEY hKey;
 	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, _T("SOFTWARE\\Microsoft\\DirectX"), 0, KEY_READ, &hKey) == ERROR_SUCCESS)
 	{
@@ -551,6 +552,7 @@ static std::string GetDriverVersionFromLUID(const LUID& luid)
 
 		RegCloseKey(hKey);
 	}
+#endif
 
 	return ret;
 }

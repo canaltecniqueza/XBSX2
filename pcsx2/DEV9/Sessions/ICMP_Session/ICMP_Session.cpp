@@ -186,7 +186,7 @@ namespace Sessions
 	//Note, we can finish reading but have no data
 	ICMP_Session::PingResult* ICMP_Session::Ping::Recv()
 	{
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(_UWP)
 		if (WaitForSingleObject(icmpEvent, 0) == WAIT_OBJECT_0)
 		{
 			ResetEvent(icmpEvent);
@@ -514,12 +514,14 @@ namespace Sessions
 				result.code = 0;
 				return &result;
 		}
+#else
+		return false;
 #endif
 	}
 
 	bool ICMP_Session::Ping::Send(IP_Address parAdapterIP, IP_Address parDestIP, int parTimeToLive, PayloadPtr* parPayload)
 	{
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(_UWP)
 		//Documentation is incorrect, IP_OPTION_INFORMATION is to be used regardless of platform
 		IP_OPTION_INFORMATION ipInfo{0};
 		ipInfo.Ttl = parTimeToLive;
@@ -644,6 +646,8 @@ namespace Sessions
 			default:
 				return false;
 		}
+#else
+		return false;
 #endif
 	}
 

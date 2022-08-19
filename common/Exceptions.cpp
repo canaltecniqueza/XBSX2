@@ -112,12 +112,13 @@ void pxOnAssertFail(const char* file, int line, const char* func, const char* ms
 	char full_msg[512];
 	std::snprintf(full_msg, sizeof(full_msg), "%s:%d: assertion failed in function %s: %s\n", file, line, func, msg);
 
-#if defined(_WIN32) && !defined(_UWP)
+#if defined(_WIN32)
 	HANDLE error_handle = GetStdHandle(STD_ERROR_HANDLE);
 	if (error_handle != INVALID_HANDLE_VALUE)
 		WriteConsoleA(GetStdHandle(STD_ERROR_HANDLE), full_msg, static_cast<DWORD>(std::strlen(full_msg)), NULL, NULL);
 	OutputDebugStringA(full_msg);
 
+#ifndef _UWP
 	std::snprintf(
 		full_msg, sizeof(full_msg),
 		"Assertion failed in function %s (%s:%d):\n\n%s\n\nPress Abort to exit, Retry to break to debugger, or Ignore to attempt to continue.",
@@ -134,6 +135,9 @@ void pxOnAssertFail(const char* file, int line, const char* func, const char* ms
 		CrashHandler::WriteDumpForCaller();
 		TerminateProcess(GetCurrentProcess(), 0xBAADC0DE);
 	}
+#else
+	__debugbreak();
+#endif
 #else
 	fputs(full_msg, stderr);
 	fputs("\nAborting application.\n", stderr);

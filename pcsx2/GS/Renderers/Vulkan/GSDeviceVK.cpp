@@ -248,6 +248,7 @@ bool GSDeviceVK::CheckFeatures()
 	m_features.prefer_new_textures = true;
 	m_features.provoking_vertex_last = g_vulkan_context->GetOptionalExtensions().vk_ext_provoking_vertex;
 	m_features.dual_source_blend = features.dualSrcBlend && !GSConfig.DisableDualSourceBlend;
+	m_features.clip_control = true;
 
 	if (!m_features.dual_source_blend)
 		Console.Warning("Vulkan driver is missing dual-source blending. This will have an impact on performance.");
@@ -405,7 +406,8 @@ VkFormat GSDeviceVK::LookupNativeFormat(GSTexture::Format format) const
 
 GSTexture* GSDeviceVK::CreateSurface(GSTexture::Type type, int width, int height, int levels, GSTexture::Format format)
 {
-	pxAssert(type != GSTexture::Type::Offscreen);
+	pxAssert(type != GSTexture::Type::Offscreen && type != GSTexture::Type::SparseRenderTarget &&
+			 type != GSTexture::Type::SparseDepthStencil);
 
 	const u32 clamped_width = static_cast<u32>(std::clamp<int>(1, width, g_vulkan_context->GetMaxImageDimension2D()));
 	const u32 clamped_height = static_cast<u32>(std::clamp<int>(1, height, g_vulkan_context->GetMaxImageDimension2D()));
@@ -507,38 +509,25 @@ void GSDeviceVK::CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r,
 
 				return;
 			}
-
-			if (dTexVK->GetState() == GSTexture::State::Cleared)
+			else
 			{
-				// destination is cleared, if it's the same colour and rect, we can just avoid this entirely
-				if (dTexVK->IsDepthStencil())
-				{
-					if (dTexVK->GetClearDepth() == sTexVK->GetClearDepth())
-						return;
-				}
-				else
-				{
-					if ((dTexVK->GetClearColor() == (sTexVK->GetClearColor())).alltrue())
-						return;
-				}
+				// otherwise we need to do an attachment clear
+				const bool depth = (dTexVK->GetType() == GSTexture::Type::DepthStencil);
+				OMSetRenderTargets(depth ? nullptr : dTexVK, depth ? dTexVK : nullptr, dtex_rc, false);
+				BeginRenderPassForStretchRect(dTexVK, dtex_rc, GSVector4i(destX, destY, destX + r.width(), destY + r.height()));
+
+				// so use an attachment clear
+				VkClearAttachment ca;
+				ca.aspectMask = depth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+				GSVector4::store<false>(ca.clearValue.color.float32, sTexVK->GetClearColor());
+				ca.clearValue.depthStencil.depth = sTexVK->GetClearDepth();
+				ca.clearValue.depthStencil.stencil = 0;
+				ca.colorAttachment = 0;
+
+				const VkClearRect cr = { {{0, 0}, {static_cast<u32>(r.width()), static_cast<u32>(r.height())}}, 0u, 1u };
+				vkCmdClearAttachments(g_vulkan_context->GetCurrentCommandBuffer(), 1, &ca, 1, &cr);
+				return;
 			}
-
-			// otherwise we need to do an attachment clear
-			const bool depth = (dTexVK->GetType() == GSTexture::Type::DepthStencil);
-			OMSetRenderTargets(depth ? nullptr : dTexVK, depth ? dTexVK : nullptr, dtex_rc, false);
-			BeginRenderPassForStretchRect(dTexVK, dtex_rc, GSVector4i(destX, destY, destX + r.width(), destY + r.height()));
-
-			// so use an attachment clear
-			VkClearAttachment ca;
-			ca.aspectMask = depth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-			GSVector4::store<false>(ca.clearValue.color.float32, sTexVK->GetClearColor());
-			ca.clearValue.depthStencil.depth = sTexVK->GetClearDepth();
-			ca.clearValue.depthStencil.stencil = 0;
-			ca.colorAttachment = 0;
-
-			const VkClearRect cr = { {{0, 0}, {static_cast<u32>(r.width()), static_cast<u32>(r.height())}}, 0u, 1u };
-			vkCmdClearAttachments(g_vulkan_context->GetCurrentCommandBuffer(), 1, &ca, 1, &cr);
-			return;
 		}
 
 		// commit the clear to the source first, then do normal copy
@@ -1989,7 +1978,6 @@ VkShaderModule GSDeviceVK::GetTFXFragmentShader(const GSHWDrawConfig::PSSelector
 	AddMacro(ss, "PS_BLEND_C", sel.blend_c);
 	AddMacro(ss, "PS_BLEND_D", sel.blend_d);
 	AddMacro(ss, "PS_BLEND_MIX", sel.blend_mix);
-	AddMacro(ss, "PS_FIXED_ONE_A", sel.fixed_one_a);
 	AddMacro(ss, "PS_IIP", sel.iip);
 	AddMacro(ss, "PS_SHUFFLE", sel.shuffle);
 	AddMacro(ss, "PS_READ_BA", sel.read_ba);
@@ -2002,6 +1990,7 @@ VkShaderModule GSDeviceVK::GetTFXFragmentShader(const GSHWDrawConfig::PSSelector
 	AddMacro(ss, "PS_SCANMSK", sel.scanmsk);
 	AddMacro(ss, "PS_SCALE_FACTOR", GSConfig.UpscaleMultiplier);
 	AddMacro(ss, "PS_TEX_IS_FB", sel.tex_is_fb);
+	AddMacro(ss, "PS_TEX_IS_DS", sel.tex_is_ds);
 	AddMacro(ss, "PS_NO_COLOR", sel.no_color);
 	AddMacro(ss, "PS_NO_COLOR1", sel.no_color1);
 	AddMacro(ss, "PS_NO_ABLEND", sel.no_ablend);
@@ -2891,7 +2880,6 @@ void GSDeviceVK::RenderHW(GSHWDrawConfig& config)
 
 		case GSHWDrawConfig::DestinationAlphaMode::Stencil:
 			SetupDATE(config.rt, config.ds, config.datm, config.drawarea);
-			DATE_rp = DATE_RENDER_PASS_STENCIL;
 			break;
 	}
 
@@ -2907,6 +2895,7 @@ void GSDeviceVK::RenderHW(GSHWDrawConfig& config)
 	}
 	if (config.pal)
 		PSSetShaderResource(1, config.pal, true);
+
 	if (config.blend.constant_enable)
 		SetBlendConstants(config.blend.constant);
 

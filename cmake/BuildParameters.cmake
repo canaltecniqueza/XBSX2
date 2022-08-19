@@ -38,6 +38,7 @@ if(DISABLE_BUILD_DATE OR openSUSE)
 endif()
 
 option(USE_VTUNE "Plug VTUNE to profile GS JIT.")
+option(USE_ACHIEVEMENTS "Build with RetroAchievements support" ON)
 
 #-------------------------------------------------------------------------------
 # Graphical option
@@ -56,6 +57,7 @@ option(XDG_STD "Use XDG standard path instead of the standard PCSX2 path")
 option(CUBEB_API "Build Cubeb support on SPU2" ON)
 option(GTK2_API "Use GTK2 api (legacy)")
 option(QT_BUILD "Build Qt frontend instead of wx" OFF)
+option(NOGUI_BUILD "Build NoGUI frontend" OFF)
 
 if(UNIX AND NOT APPLE)
 	option(X11_API "Enable X11 support" ON)
@@ -301,7 +303,7 @@ if(CMAKE_BUILD_STRIP)
 	add_link_options(-s)
 endif()
 
-if(QT_BUILD)
+if(QT_BUILD OR NOGUI_BUILD)
 	# We want the core PCSX2 library.
 	set(PCSX2_CORE TRUE)
 endif()

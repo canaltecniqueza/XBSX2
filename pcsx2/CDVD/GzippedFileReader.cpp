@@ -31,6 +31,10 @@
 #include "HostSettings.h"
 #endif
 
+#ifdef _WIN32
+#include "common/RedtapeWindows.h"
+#endif
+
 #define CLAMP(val, minval, maxval) (std::min(maxval, std::max(minval, val)))
 
 #define GZIP_ID "PCSX2.index.gzip.v1|"
@@ -242,6 +246,7 @@ void GzippedFileReader::AsyncPrefetchReset()
 
 void GzippedFileReader::AsyncPrefetchOpen()
 {
+#ifndef _UWP
 	hOverlappedFile = CreateFile(
 		StringUtil::UTF8StringToWideString(m_filename).c_str(),
 		GENERIC_READ,
@@ -250,6 +255,16 @@ void GzippedFileReader::AsyncPrefetchOpen()
 		OPEN_EXISTING,
 		FILE_FLAG_SEQUENTIAL_SCAN | FILE_FLAG_OVERLAPPED,
 		NULL);
+#else
+	hOverlappedFile = CreateFileFromAppW(
+		StringUtil::UTF8StringToWideString(m_filename).c_str(),
+		GENERIC_READ,
+		FILE_SHARE_READ,
+		NULL,
+		OPEN_EXISTING,
+		FILE_FLAG_SEQUENTIAL_SCAN | FILE_FLAG_OVERLAPPED,
+		NULL);
+#endif
 };
 
 void GzippedFileReader::AsyncPrefetchClose()

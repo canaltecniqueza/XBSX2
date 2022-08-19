@@ -1275,6 +1275,15 @@
     <ClCompile Include="Frontend\LogSink.cpp">
       <Filter>Host</Filter>
     </ClCompile>
+    <ClCompile Include="Frontend\Win32RawInputSource.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Frontend\ImGuiFullscreen.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
+    <ClCompile Include="Frontend\FullscreenUI.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Patch.h">
@@ -2119,6 +2128,16 @@
     <ClInclude Include="Frontend\LogSink.h">
       <Filter>Host</Filter>
     </ClInclude>
+    <ClInclude Include="Frontend\Win32RawInputSource.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Frontend\ImGuiFullscreen.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="Frontend\FullscreenUI.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+    <ClInclude Include="svnrev.h" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuildStep Include="rdebug\deci2.h">

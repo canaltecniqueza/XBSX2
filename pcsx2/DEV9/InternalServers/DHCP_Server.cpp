@@ -114,6 +114,7 @@ namespace InternalServers
 #ifdef _WIN32
 	void DHCP_Server::AutoNetmask(PIP_ADAPTER_ADDRESSES adapter)
 	{
+#ifndef _UWP
 		if (adapter != nullptr)
 		{
 			PIP_ADAPTER_UNICAST_ADDRESS address = adapter->FirstUnicastAddress;
@@ -127,6 +128,7 @@ namespace InternalServers
 					netmask.integer = mask;
 			}
 		}
+#endif
 	}
 #elif defined(__POSIX__)
 	void DHCP_Server::AutoNetmask(ifaddrs* adapter)

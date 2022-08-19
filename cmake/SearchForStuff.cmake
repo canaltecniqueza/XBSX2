@@ -20,6 +20,11 @@ if (WIN32)
 	add_subdirectory(3rdparty/xz EXCLUDE_FROM_ALL)
 	add_subdirectory(3rdparty/D3D12MemAlloc EXCLUDE_FROM_ALL)
 else()
+	## Use cmake package to find module
+	if (Linux)
+		find_package(ALSA REQUIRED)
+		make_imported_target_if_missing(ALSA::ALSA ALSA)
+	endif()
 	find_package(PCAP REQUIRED)
 	find_package(Gettext) # translation tool
 	find_package(LibLZMA REQUIRED)
@@ -234,6 +239,26 @@ if(QT_BUILD)
 
 	# We use the bundled (latest) SDL version for Qt.
 	find_optional_system_library(SDL2 3rdparty/sdl2 2.0.22)
+	
+	# rcheevos backend for RetroAchievements.
+	if(USE_ACHIEVEMENTS)
+		find_package(CURL REQUIRED)
+		add_subdirectory(3rdparty/rcheevos EXCLUDE_FROM_ALL)
+	endif()
+	
+endif()
+
+# NoGUI needs X and Wayland libraries depending on what's configured.
+if(NOGUI_BUILD)
+	if(WAYLAND_API)
+		find_package(ECM REQUIRED NO_MODULE)
+		list(APPEND CMAKE_MODULE_PATH "${ECM_MODULE_PATH}")
+		find_package(Wayland REQUIRED Client)
+		find_package(WaylandScanner REQUIRED)
+		find_package(WaylandProtocols 1.15 REQUIRED)
+		find_package(XKBCommon REQUIRED)
+		make_imported_target_if_missing(XKBCommon::XKBCommon XKBCOMMON)
+	endif()
 endif()
 
 add_subdirectory(3rdparty/lzma EXCLUDE_FROM_ALL)
@@ -248,6 +273,7 @@ else()
 	set(BIN2CPPDEP ${CMAKE_SOURCE_DIR}/linux_various/hex2h.pl)
 endif()
 
+add_subdirectory(3rdparty/jpgd EXCLUDE_FROM_ALL)
 add_subdirectory(3rdparty/simpleini EXCLUDE_FROM_ALL)
 add_subdirectory(3rdparty/imgui EXCLUDE_FROM_ALL)
 add_subdirectory(3rdparty/cpuinfo EXCLUDE_FROM_ALL)

@@ -125,7 +125,7 @@ void DisplayWidget::updateRelativeMode(bool master_enable)
 
 #ifdef _WIN32
 	// prefer ClipCursor() over warping movement when we're using raw input
-	bool clip_cursor = relative_mode && false /*InputManager::IsUsingRawInput()*/;
+	bool clip_cursor = relative_mode && InputManager::IsUsingRawInput();
 	if (m_relative_mouse_enabled == relative_mode && m_clip_mouse_enabled == clip_cursor)
 		return;
 
@@ -330,12 +330,15 @@ bool DisplayWidget::event(QEvent* event)
 
 		case QEvent::Wheel:
 		{
+			// wheel delta is 120 as in winapi
 			const QPoint delta_angle(static_cast<QWheelEvent*>(event)->angleDelta());
-			const float dx = std::clamp(static_cast<float>(delta_angle.x()) / QtUtils::MOUSE_WHEEL_DELTA, -1.0f, 1.0f);
+			constexpr float DELTA = 120.0f;
+
+			const float dx = std::clamp(static_cast<float>(delta_angle.x()) / DELTA, -1.0f, 1.0f);
 			if (dx != 0.0f)
 				InputManager::UpdatePointerRelativeDelta(0, InputPointerAxis::WheelX, dx);
 
-			const float dy = std::clamp(static_cast<float>(delta_angle.y()) / QtUtils::MOUSE_WHEEL_DELTA, -1.0f, 1.0f);
+			const float dy = std::clamp(static_cast<float>(delta_angle.y()) / DELTA, -1.0f, 1.0f);
 			if (dy != 0.0f)
 				InputManager::UpdatePointerRelativeDelta(0, InputPointerAxis::WheelY, dy);
 
@@ -375,7 +378,7 @@ bool DisplayWidget::event(QEvent* event)
 		{
 			// Closing the separate widget will either cancel the close, or trigger shutdown.
 			// In the latter case, it's going to destroy us, so don't let Qt do it first.
-			QMetaObject::invokeMethod(g_main_window, "requestShutdown", Q_ARG(bool, true), Q_ARG(bool, true), Q_ARG(bool, false));
+			QMetaObject::invokeMethod(g_main_window, "requestShutdown", Q_ARG(bool, true), Q_ARG(bool, false), Q_ARG(bool, false));
 			event->ignore();
 			return true;
 		}
@@ -402,24 +405,15 @@ DisplayContainer::DisplayContainer()
 
 DisplayContainer::~DisplayContainer() = default;
 
-bool DisplayContainer::isNeeded(bool fullscreen, bool render_to_main)
+bool DisplayContainer::IsNeeded(bool fullscreen, bool render_to_main)
 {
 #if defined(_WIN32) || defined(__APPLE__)
 	return false;
 #else
-	if (!isRunningOnWayland())
+	if (!fullscreen && render_to_main)
 		return false;
 
 	// We only need this on Wayland because of client-side decorations...
-	return (fullscreen || !render_to_main);
-#endif
-}
-
-bool DisplayContainer::isRunningOnWayland()
-{
-#if defined(_WIN32) || defined(__APPLE__)
-	return false;
-#else
 	const QString platform_name = QGuiApplication::platformName();
 	return (platform_name == QStringLiteral("wayland"));
 #endif
@@ -447,7 +441,7 @@ bool DisplayContainer::event(QEvent* event)
 	{
 		// Closing the separate widget will either cancel the close, or trigger shutdown.
 		// In the latter case, it's going to destroy us, so don't let Qt do it first.
-		QMetaObject::invokeMethod(g_main_window, "requestShutdown", Q_ARG(bool, true), Q_ARG(bool, true), Q_ARG(bool, false));
+		QMetaObject::invokeMethod(g_main_window, "requestShutdown", Q_ARG(bool, true), Q_ARG(bool, false), Q_ARG(bool, false));
 		event->ignore();
 		return true;
 	}

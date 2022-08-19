@@ -69,7 +69,7 @@ static std::string hostRoot;
 void Hle_SetElfPath(const char* elfFileName)
 {
 	DevCon.WriteLn("HLE Host: Will load ELF: %s\n", elfFileName);
-	hostRoot = Path::ToNativePath(Path::GetDirectory(elfFileName)) + FS_OSPATH_SEPARATOR_STR;
+	hostRoot = Path::ToNativePath(Path::GetDirectory(elfFileName));
 	Console.WriteLn("HLE Host: Set 'host:' root path to: %s\n", hostRoot.c_str());
 }
 
@@ -98,10 +98,8 @@ namespace R3000A
 #define FIO_SO_IFREG 0x0010
 #define FIO_SO_IFDIR 0x0020
 
-	static std::string host_path(const std::string& path)
+	static std::string host_path(const std::string path)
 	{
-		// We are NOT allowing to use the root of the host unit.
-		// For now it just supports relative folders from the location of the elf
 		std::string native_path(Path::Canonicalize(path));
 		std::string new_path;
 		if (StringUtil::StartsWith(native_path, hostRoot))
@@ -329,7 +327,10 @@ namespace R3000A
 
 			FileSystem::FindResultsArray results;
 			if (!FileSystem::FindFiles(path.c_str(), "*", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_FOLDERS | FILESYSTEM_FIND_RELATIVE_PATHS | FILESYSTEM_FIND_HIDDEN_FILES, &results))
+			{
 				return -IOP_ENOENT; // Should return ENOTDIR if path is a file?
+                                    // Would love to but err's code is platform dependent
+			}
 
 			*dir = new HostDir(std::move(results), std::move(path));
 			if (!*dir)

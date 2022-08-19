@@ -14,6 +14,8 @@
  */
 
 #include "PrecompiledHeader.h"
+
+#ifndef _UWP
 #include "GS.h"
 #include "GSCaptureDlg.h"
 #include "GS/GSExtra.h"
@@ -258,3 +260,5 @@ bool GSCaptureDlg::OnCommand(HWND hWnd, UINT id, UINT code)
 	}
 	return __super::OnCommand(hWnd, id, code);
 }
+
+#endif

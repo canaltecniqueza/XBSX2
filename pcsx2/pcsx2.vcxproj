@@ -72,7 +72,7 @@
     <Link>
       <LargeAddressAware>Yes</LargeAddressAware>
       <AdditionalDependencies>comctl32.lib;ws2_32.lib;shlwapi.lib;winmm.lib;rpcrt4.lib;iphlpapi.lib;dsound.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalDependencies>dxguid.lib;dinput8.lib;hid.lib;PowrProf.lib;d3dcompiler.lib;d3d11.lib;dxgi.lib;strmiids.lib;opengl32.lib;comsuppw.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>dxguid.lib;dinput8.lib;hid.lib;PowrProf.lib;d3dcompiler.lib;d3d11.lib;dxgi.lib;strmiids.lib;opengl32.lib;comsuppw.lib;OneCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -332,6 +332,7 @@
     <ClCompile Include="Frontend\imgui_impl_opengl3.cpp" />
     <ClCompile Include="Frontend\imgui_impl_vulkan.cpp" />
     <ClCompile Include="Frontend\OpenGLHostDisplay.cpp" />
+	<ClCompile Include="Frontend\Achievements.cpp" />
     <ClCompile Include="Frontend\VulkanHostDisplay.cpp" />
     <ClCompile Include="GameDatabase.cpp" />
     <ClCompile Include="Gif_Logger.cpp" />
@@ -804,6 +805,7 @@
     <ClInclude Include="Frontend\imgui_impl_opengl3.h" />
     <ClInclude Include="Frontend\imgui_impl_vulkan.h" />
     <ClInclude Include="Frontend\OpenGLHostDisplay.h" />
+	<ClInclude Include="Frontend\Achievements.h" />
     <ClInclude Include="Frontend\VulkanHostDisplay.h" />
     <ClInclude Include="GameDatabase.h" />
     <ClInclude Include="Gif_Unit.h" />

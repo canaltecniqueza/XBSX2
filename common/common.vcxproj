@@ -4,12 +4,20 @@
   <Import Project="$(SolutionDir)common\vsprops\WinSDK.props" />
   <PropertyGroup Label="Globals">
     <ProjectGuid>{4639972E-424E-4E13-8B07-CA403C481346}</ProjectGuid>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformMinVersion>10.0.19041.0</WindowsTargetPlatformMinVersion>
+  </PropertyGroup>
+  <PropertyGroup Label="Globals" Condition="$(Configuration.Contains(UWP))">
+    <CppWinRTOptimized Condition="!$(Configuration.Contains(Release))">true</CppWinRTOptimized>
+    <CppWinRTRootNamespaceAutoMerge>false</CppWinRTRootNamespaceAutoMerge>
+    <CppWinRTGenerateWindowsMetadata>false</CppWinRTGenerateWindowsMetadata>
+    <CppWinRTEnableComponentProjection>false</CppWinRTEnableComponentProjection>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>
-    <CharacterSet>Unicode</CharacterSet>
+    <CharacterSet Condition="!$(Configuration.Contains(UWP))">Unicode</CharacterSet>
     <WholeProgramOptimization Condition="$(Configuration.Contains(Release))">true</WholeProgramOptimization>
     <UseDebugLibraries Condition="$(Configuration.Contains(Debug))">true</UseDebugLibraries>
     <UseDebugLibraries Condition="!$(Configuration.Contains(Debug))">false</UseDebugLibraries>
@@ -21,6 +29,7 @@
   <ImportGroup Label="PropertySheets">
     <Import Project="vsprops\CommonLibrary.props" />
     <Import Project="vsprops\3rdpartyDeps.props" />
+    <Import Project="$(SolutionDir)common\vsprops\CodeGen.props" />
     <Import Condition="$(Configuration.Contains(Debug))" Project="vsprops\CodeGen_Debug.props" />
     <Import Condition="$(Configuration.Contains(Devel))" Project="vsprops\CodeGen_Devel.props" />
     <Import Condition="$(Configuration.Contains(Release))" Project="vsprops\CodeGen_Release.props" />
@@ -33,6 +42,8 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>$(SolutionDir)3rdparty\d3d12memalloc\include;$(SolutionDir)3rdparty\glad\include;$(SolutionDir)3rdparty\glslang\glslang;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(SolutionDir)3rdparty\libpng</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(SolutionDir)3rdparty\jpgd</AdditionalIncludeDirectories>
       <ExceptionHandling>Async</ExceptionHandling>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <ForcedIncludeFiles>PrecompiledHeader.h</ForcedIncludeFiles>
@@ -58,29 +69,63 @@
     <ClCompile Include="FastJmp.cpp">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="GL\Context.cpp" />
-    <ClCompile Include="GL\ContextWGL.cpp" />
-    <ClCompile Include="GL\Program.cpp" />
-    <ClCompile Include="GL\ShaderCache.cpp" />
-    <ClCompile Include="GL\StreamBuffer.cpp" />
+    <ClCompile Include="GL\Context.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="GL\ContextWGL.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="GL\Program.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="GL\ShaderCache.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="GL\StreamBuffer.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="FileSystem.cpp" />
+    <ClCompile Include="Image.cpp" />
     <ClCompile Include="MD5Digest.cpp" />
     <ClCompile Include="ProgressCallback.cpp" />
-    <ClCompile Include="StackWalker.cpp" />
+    <ClCompile Include="StackWalker.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="StringUtil.cpp" />
     <ClCompile Include="SettingsWrapper.cpp" />
+    <ClCompile Include="TextureDecompress.cpp" />
     <ClCompile Include="Timer.cpp" />
     <ClCompile Include="VirtualMemory.cpp" />
-    <ClCompile Include="Vulkan\vk_mem_alloc.cpp" />
-    <ClCompile Include="Vulkan\Builders.cpp" />
-    <ClCompile Include="Vulkan\Context.cpp" />
-    <ClCompile Include="Vulkan\Loader.cpp" />
-    <ClCompile Include="Vulkan\ShaderCache.cpp" />
-    <ClCompile Include="Vulkan\ShaderCompiler.cpp" />
-    <ClCompile Include="Vulkan\StreamBuffer.cpp" />
-    <ClCompile Include="Vulkan\SwapChain.cpp" />
-    <ClCompile Include="Vulkan\Texture.cpp" />
-    <ClCompile Include="Vulkan\Util.cpp" />
+    <ClCompile Include="Vulkan\vk_mem_alloc.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="Vulkan\Builders.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="Vulkan\Context.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="Vulkan\Loader.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="Vulkan\ShaderCache.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="Vulkan\ShaderCompiler.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="Vulkan\StreamBuffer.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="Vulkan\SwapChain.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="Vulkan\Texture.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="Vulkan\Util.cpp">
+      <ExcludedFromBuild Condition="$(Configuration.Contains(UWP))">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="WindowInfo.cpp" />
     <ClCompile Include="Perf.cpp" />
     <ClCompile Include="PrecompiledHeader.cpp">
@@ -126,6 +171,7 @@
     <ClInclude Include="D3D12\StreamBuffer.h" />
     <ClInclude Include="D3D12\Texture.h" />
     <ClInclude Include="D3D12\Util.h" />
+    <ClInclude Include="Easing.h" />
     <ClInclude Include="boost_spsc_queue.hpp" />
     <ClInclude Include="FastJmp.h" />
     <ClInclude Include="GL\Context.h" />
@@ -135,6 +181,7 @@
     <ClInclude Include="GL\StreamBuffer.h" />
     <ClInclude Include="FileSystem.h" />
     <ClInclude Include="HashCombine.h" />
+    <ClInclude Include="Image.h" />
     <ClInclude Include="LRUCache.h" />
     <ClInclude Include="MD5Digest.h" />
     <ClInclude Include="ProgressCallback.h" />
@@ -154,6 +201,7 @@
     <ClInclude Include="PrecompiledHeader.h" />
     <ClInclude Include="RedtapeWindows.h" />
     <ClInclude Include="SafeArray.h" />
+    <ClInclude Include="TextureDecompress.h" />
     <ClInclude Include="Timer.h" />
     <ClInclude Include="Vulkan\Builders.h" />
     <ClInclude Include="Vulkan\Context.h" />
@@ -198,14 +246,17 @@
     <ProjectReference Include="..\3rdparty\d3d12memalloc\d3d12memalloc.vcxproj">
       <Project>{d45cec7a-3171-40dd-975d-e1544cf16139}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\3rdparty\glad\glad.vcxproj">
+    <ProjectReference Include="..\3rdparty\glad\glad.vcxproj" Condition="!$(Configuration.Contains(UWP))">
       <Project>{c0293b32-5acf-40f0-aa6c-e6da6f3bf33a}</Project>
     </ProjectReference>
-    <ProjectReference Include="..\3rdparty\glslang\glslang.vcxproj">
+    <ProjectReference Include="..\3rdparty\glslang\glslang.vcxproj" Condition="!$(Configuration.Contains(UWP))">
       <Project>{ef6834a9-11f3-4331-bc34-21b325abb180}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\3rdparty\jpgd\jpgd.vcxproj">
+      <Project>{ed2f21fd-0a36-4a8f-9b90-e7d92a2acb63}</Project>
+    </ProjectReference>
   </ItemGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Import Project="$(SolutionDir)common\vsprops\Targets.props" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
   </ImportGroup>

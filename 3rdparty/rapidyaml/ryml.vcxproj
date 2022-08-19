@@ -5,12 +5,14 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{DE9653B6-17DD-356A-9EE0-28A731772587}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformMinVersion>10.0.19041.0</WindowsTargetPlatformMinVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>
-    <CharacterSet>MultiByte</CharacterSet>
+    <CharacterSet Condition="!$(Configuration.Contains(UWP))">MultiByte</CharacterSet>
     <WholeProgramOptimization Condition="$(Configuration.Contains(Release))">true</WholeProgramOptimization>
     <UseDebugLibraries Condition="$(Configuration.Contains(Debug))">true</UseDebugLibraries>
     <UseDebugLibraries Condition="!$(Configuration.Contains(Debug))">false</UseDebugLibraries>
@@ -20,6 +22,7 @@
   <ImportGroup Label="PropertySheets">
     <Import Project="..\DefaultProjectRootDir.props" />
     <Import Project="..\3rdparty.props" />
+    <Import Project="$(SolutionDir)common\vsprops\CodeGen.props" />
     <Import Condition="$(Configuration.Contains(Debug))" Project="..\..\common\vsprops\CodeGen_Debug.props" />
     <Import Condition="$(Configuration.Contains(Devel))" Project="..\..\common\vsprops\CodeGen_Devel.props" />
     <Import Condition="$(Configuration.Contains(Release))" Project="..\..\common\vsprops\CodeGen_Release.props" />
@@ -73,7 +76,8 @@
     <ClCompile Include="rapidyaml\src\c4\yml\tree.cpp" />
     <ClInclude Include="rapidyaml\src\c4\yml\writer.hpp" />
     <ClInclude Include="rapidyaml\src\c4\yml\yml.hpp" />
-    <Natvis Include="rapidyaml\src\ryml.natvis"></Natvis>
+    <Natvis Include="rapidyaml\src\ryml.natvis">
+    </Natvis>
     <ClInclude Include="rapidyaml\ext\c4core\src\c4\allocator.hpp" />
     <ClInclude Include="rapidyaml\ext\c4core\src\c4\base64.hpp" />
     <ClCompile Include="rapidyaml\ext\c4core\src\c4\base64.cpp" />
@@ -125,14 +129,15 @@
     <ClInclude Include="rapidyaml\ext\c4core\src\c4\windows.hpp" />
     <ClInclude Include="rapidyaml\ext\c4core\src\c4\windows_pop.hpp" />
     <ClInclude Include="rapidyaml\ext\c4core\src\c4\windows_push.hpp" />
-    <Natvis Include="rapidyaml\ext\c4core\src\c4\c4core.natvis"></Natvis>
+    <Natvis Include="rapidyaml\ext\c4core\src\c4\c4core.natvis">
+    </Natvis>
     <ClInclude Include="rapidyaml\ext\c4core\src\c4\ext\debugbreak\debugbreak.h" />
     <ClInclude Include="rapidyaml\ext\c4core\src\c4\ext\rng\rng.hpp" />
     <ClInclude Include="rapidyaml\ext\c4core\src\c4\ext\sg14\inplace_function.h" />
     <ClInclude Include="rapidyaml\ext\c4core\src\c4\ext\fast_float.hpp" />
     <ClInclude Include="rapidyaml\ext\c4core\src\c4\ext\fast_float_all.h" />
   </ItemGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Import Project="$(SolutionDir)common\vsprops\Targets.props" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

@@ -31,12 +31,12 @@ class GSCapture
 	std::string m_out_dir;
 	int m_threads;
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(_UWP)
 
 	wil::com_ptr_failfast<IGraphBuilder> m_graph;
 	wil::com_ptr_failfast<IBaseFilter> m_src;
 
-#elif defined(__unix__)
+#elif defined(__unix__) || defined(_UWP)
 
 	u64 m_frame;
 	std::vector<std::unique_ptr<GSPng::Worker>> m_workers;

@@ -105,6 +105,8 @@ void vif1TransferToMemory()
 		//This could be potentially bad and cause hangs. I guess we will find out.
 		DevCon.Warning("QWC left on VIF FIFO Reverse");
 	}
+
+	
 }
 
 bool _VIF1chain()
@@ -137,7 +139,7 @@ bool _VIF1chain()
 	}
 
 	VIF_LOG("VIF1chain size=%d, madr=%lx, tadr=%lx",
-		vif1ch.qwc, vif1ch.madr, vif1ch.tadr);
+	        vif1ch.qwc, vif1ch.madr, vif1ch.tadr);
 
 	if (vif1.irqoffset.enabled)
 		return VIF1transfer(pMem + vif1.irqoffset.value, vif1ch.qwc * 4 - vif1.irqoffset.value, false);
@@ -147,19 +149,18 @@ bool _VIF1chain()
 
 __fi void vif1SetupTransfer()
 {
-	tDMA_TAG* ptag;
-
+    tDMA_TAG* ptag;
+	
 	ptag = dmaGetAddr(vif1ch.tadr, false); //Set memory pointer to TADR
 
-	if (!(vif1ch.transfer("Vif1 Tag", ptag)))
-		return;
+	if (!(vif1ch.transfer("Vif1 Tag", ptag))) return;
 
 	vif1ch.madr = ptag[1]._u32; //MADR = ADDR field + SPR
 	g_vif1Cycles += 1; // Add 1 g_vifCycles from the QW read for the tag
 	vif1.inprogress &= ~1;
 
 	VIF_LOG("VIF1 Tag %8.8x_%8.8x size=%d, id=%d, madr=%lx, tadr=%lx",
-		ptag[1]._u32, ptag[0]._u32, vif1ch.qwc, ptag->ID, vif1ch.madr, vif1ch.tadr);
+			ptag[1]._u32, ptag[0]._u32, vif1ch.qwc, ptag->ID, vif1ch.madr, vif1ch.tadr);
 
 	if (!vif1.done && ((dmacRegs.ctrl.STD == STD_VIF1) && (ptag->ID == TAG_REFS))) // STD == VIF1
 	{
@@ -213,7 +214,7 @@ __fi void vif1SetupTransfer()
 
 	vif1.done |= hwDmacSrcChainWithStack(vif1ch, ptag->ID);
 
-	if (vif1ch.qwc > 0)
+	if(vif1ch.qwc > 0)
 		vif1.inprogress |= 1;
 
 	//Check TIE bit of CHCR and IRQ bit of tag
@@ -221,7 +222,7 @@ __fi void vif1SetupTransfer()
 	{
 		VIF_LOG("dmaIrq Set");
 
-		//End Transfer
+        //End Transfer
 		vif1.done = true;
 		return;
 	}
@@ -283,7 +284,7 @@ __fi void vif1Interrupt()
 		gifRegs.stat.OPH = 0;
 		vif1Regs.stat.VGW = false; //Let vif continue if it's stuck on a flush
 
-		if (gifUnit.checkPaths(1, 0, 1))
+		if(gifUnit.checkPaths(1,0,1))
 			gifUnit.Execute(false, true);
 	}
 	//Some games (Fahrenheit being one) start vif first, let it loop through blankness while it sets MFIFO mode, so we need to check it here.
@@ -302,7 +303,7 @@ __fi void vif1Interrupt()
 	// from the GS then we handle that separately (KH2 for testing)
 	if (vif1ch.chcr.DIR)
 	{
-		bool isDirect = (vif1.cmd & 0x7f) == 0x50;
+		bool isDirect   = (vif1.cmd & 0x7f) == 0x50;
 		bool isDirectHL = (vif1.cmd & 0x7f) == 0x51;
 		if ((isDirect && !gifUnit.CanDoPath2()) || (isDirectHL && !gifUnit.CanDoPath2HL()))
 		{
@@ -353,7 +354,7 @@ __fi void vif1Interrupt()
 			//NFSHPS stalls when the whole packet has gone across (it stalls in the last 32bit cmd)
 			//In this case VIF will end
 			vif1Regs.stat.FQC = std::min((u32)0x10, vif1ch.qwc);
-			if ((vif1ch.qwc > 0 || !vif1.done) && !CHECK_VIF1STALLHACK)
+			if ((vif1ch.qwc > 0 || !vif1.done) && !CHECK_VIF1STALLHACK)	
 			{
 				vif1Regs.stat.VPS = VPS_DECODING; //If there's more data you need to say it's decoding the next VIF CMD (Onimusha - Blade Warriors)
 				VIF_LOG("VIF1 Stalled");
@@ -394,8 +395,8 @@ __fi void vif1Interrupt()
 			else
 				CPU_INT(DMAC_VIF1, g_vif1Cycles);
 		}
-		return;
-	}
+            return;
+    }
 
 	if (!vif1.done)
 	{
@@ -455,21 +456,21 @@ __fi void vif1Interrupt()
 	g_vif1Cycles = 0;
 	VIF_LOG("VIF1 DMA End");
 	hwDmacIrq(DMAC_VIF1);
+
 }
 
 void dmaVIF1()
 {
 	VIF_LOG("dmaVIF1 chcr = %lx, madr = %lx, qwc  = %lx\n"
 			"        tadr = %lx, asr0 = %lx, asr1 = %lx",
-		vif1ch.chcr._u32, vif1ch.madr, vif1ch.qwc,
-		vif1ch.tadr, vif1ch.asr0, vif1ch.asr1);
+			vif1ch.chcr._u32, vif1ch.madr, vif1ch.qwc,
+			vif1ch.tadr, vif1ch.asr0, vif1ch.asr1);
 
 	g_vif1Cycles = 0;
 	vif1.inprogress = 0;
 
 	if (vif1ch.qwc > 0) // Normal Mode
 	{
-
 		// ignore tag if it's a GS download (Def Jam Fight for NY)
 		if (vif1ch.chcr.MOD == CHAIN_MODE && vif1ch.chcr.DIR)
 		{
@@ -507,6 +508,7 @@ void dmaVIF1()
 		vif1.inprogress &= ~0x1;
 		vif1.dmamode = VIF_CHAIN_MODE;
 		vif1.done = false;
+		
 	}
 
 	if (vif1ch.chcr.DIR)

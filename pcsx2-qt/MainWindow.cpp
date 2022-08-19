@@ -28,7 +28,7 @@
 #include "common/CocoaTools.h"
 #include "common/FileSystem.h"
 
-#include "pcsx2/CDVD/CDVDcommon.h"
+#include "pcsx2/CDVD/CDVDaccess.h"
 #include "pcsx2/CDVD/CDVDdiscReader.h"
 #include "pcsx2/Frontend/GameList.h"
 #include "pcsx2/Frontend/LogSink.h"
@@ -84,18 +84,6 @@ const char* MainWindow::DEFAULT_THEME_NAME = "darkfusion";
 #endif
 
 MainWindow* g_main_window = nullptr;
-static QString s_unthemed_style_name;
-static bool s_unthemed_style_name_set;
-
-#if defined(_WIN32) || defined(__APPLE__)
-static const bool s_use_central_widget = false;
-#else
-// Qt Wayland is broken. Any sort of stacked widget usage fails to update,
-// leading to broken window resizes, no display rendering, etc. So, we mess
-// with the central widget instead. Which we can't do on xorg, because it
-// breaks window resizing there...
-static bool s_use_central_widget = false;
-#endif
 
 // UI thread VM validity.
 static bool s_vm_valid = false;
@@ -106,10 +94,6 @@ MainWindow::MainWindow(const QString& unthemed_style_name)
 {
 	pxAssert(!g_main_window);
 	g_main_window = this;
-
-#if !defined(_WIN32) && !defined(__APPLE__)
-	s_use_central_widget = DisplayContainer::isRunningOnWayland();
-#endif
 }
 
 MainWindow::~MainWindow()
@@ -124,12 +108,15 @@ MainWindow::~MainWindow()
 
 void MainWindow::initialize()
 {
+	setStyleFromSettings();
+	setIconThemeFromStyle();
 #ifdef __APPLE__
 	CocoaTools::AddThemeChangeHandler(this, [](void* ctx) {
 		// This handler is called *before* the style change has propagated far enough for Qt to see it
 		// Use RunOnUIThread to delay until it has
-		QtHost::RunOnUIThread([ctx = static_cast<MainWindow*>(ctx)]{
-			ctx->updateTheme();// Qt won't notice the style change without us touching the palette in some way
+		QtHost::RunOnUIThread([ctx = static_cast<MainWindow*>(ctx)] {
+			ctx->setStyleFromSettings(); // Qt won't notice the style change without us touching the palette in some way
+			ctx->setIconThemeFromStyle();
 		});
 	});
 #endif
@@ -164,11 +151,6 @@ static void makeIconsMasks(QWidget* menu)
 	}
 }
 
-QWidget* MainWindow::getContentParent()
-{
-	return s_use_central_widget ? static_cast<QWidget*>(this) : static_cast<QWidget*>(m_ui.mainContainer);
-}
-
 void MainWindow::setupAdditionalUi()
 {
 	setWindowIcon(QIcon(QStringLiteral("%1/icons/AppIconLarge.png").arg(QtHost::GetResourcesBasePath())));
@@ -187,48 +169,25 @@ void MainWindow::setupAdditionalUi()
 	m_ui.actionViewStatusBar->setChecked(status_bar_visible);
 	m_ui.statusBar->setVisible(status_bar_visible);
 
-	m_game_list_widget = new GameListWidget(getContentParent());
+	m_game_list_widget = new GameListWidget(this);
 	m_game_list_widget->initialize();
 	m_ui.actionGridViewShowTitles->setChecked(m_game_list_widget->getShowGridCoverTitles());
-	if (s_use_central_widget)
-	{
-		m_ui.mainContainer = nullptr; // setCentralWidget() will delete this
-		setCentralWidget(m_game_list_widget);
-	}
-	else
-	{
-		m_ui.mainContainer->addWidget(m_game_list_widget);
-	}
+	setCentralWidget(m_game_list_widget);
 
 	m_status_progress_widget = new QProgressBar(m_ui.statusBar);
 	m_status_progress_widget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 	m_status_progress_widget->setFixedSize(140, 16);
-	m_status_progress_widget->setMinimum(0);
-	m_status_progress_widget->setMaximum(100);
 	m_status_progress_widget->hide();
 
-	m_status_verbose_widget = new QLabel(m_ui.statusBar);
-	m_status_verbose_widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-	m_status_verbose_widget->setFixedHeight(16);
-	m_status_verbose_widget->hide();
-
-	m_status_renderer_widget = new QLabel(m_ui.statusBar);
-	m_status_renderer_widget->setFixedHeight(16);
-	m_status_renderer_widget->setFixedSize(65, 16);
-	m_status_renderer_widget->hide();
-
-	m_status_resolution_widget = new QLabel(m_ui.statusBar);
-	m_status_resolution_widget->setFixedHeight(16);
-	m_status_resolution_widget->setFixedSize(70, 16);
-	m_status_resolution_widget->hide();
+	m_status_gs_widget = new QLabel(m_ui.statusBar);
+	m_status_gs_widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	m_status_gs_widget->setFixedHeight(16);
+	m_status_gs_widget->hide();
 
 	m_status_fps_widget = new QLabel(m_ui.statusBar);
-	m_status_fps_widget->setFixedSize(85, 16);
+	m_status_fps_widget->setAlignment(Qt::AlignRight);
+	m_status_fps_widget->setFixedHeight(16);
 	m_status_fps_widget->hide();
-
-	m_status_vps_widget = new QLabel(m_ui.statusBar);
-	m_status_vps_widget->setFixedSize(125, 16);
-	m_status_vps_widget->hide();
 
 	for (u32 scale = 0; scale <= 10; scale++)
 	{
@@ -301,10 +260,6 @@ void MainWindow::connectSignals()
 			m_game_list_widget->gridZoomOut();
 	});
 	connect(m_ui.actionGridViewRefreshCovers, &QAction::triggered, m_game_list_widget, &GameListWidget::refreshGridCovers);
-	connect(m_game_list_widget, &GameListWidget::layoutChange, this, [this]() {
-		QSignalBlocker sb(m_ui.actionGridViewShowTitles);
-		m_ui.actionGridViewShowTitles->setChecked(m_game_list_widget->getShowGridCoverTitles());
-	});
 
 	SettingWidgetBinder::BindWidgetToBoolSetting(nullptr, m_ui.actionViewStatusBarVerbose, "UI", "VerboseStatusBar", false);
 
@@ -354,6 +309,8 @@ void MainWindow::connectSignals()
 
 void MainWindow::connectVMThreadSignals(EmuThread* thread)
 {
+	connect(m_ui.actionStartFullscreenUI, &QAction::triggered, thread, &EmuThread::startFullscreenUI);
+	connect(m_ui.actionStartFullscreenUI2, &QAction::triggered, thread, &EmuThread::startFullscreenUI);
 	connect(thread, &EmuThread::onCreateDisplayRequested, this, &MainWindow::createDisplay, Qt::BlockingQueuedConnection);
 	connect(thread, &EmuThread::onUpdateDisplayRequested, this, &MainWindow::updateDisplay, Qt::BlockingQueuedConnection);
 	connect(thread, &EmuThread::onDestroyDisplayRequested, this, &MainWindow::destroyDisplay, Qt::BlockingQueuedConnection);
@@ -364,6 +321,7 @@ void MainWindow::connectVMThreadSignals(EmuThread* thread)
 	connect(thread, &EmuThread::onVMResumed, this, &MainWindow::onVMResumed);
 	connect(thread, &EmuThread::onVMStopped, this, &MainWindow::onVMStopped);
 	connect(thread, &EmuThread::onGameChanged, this, &MainWindow::onGameChanged);
+	connect(thread, &EmuThread::onPerformanceMetricsUpdated, this, &MainWindow::onPerformanceMetricsUpdated);
 
 	connect(m_ui.actionReset, &QAction::triggered, thread, &EmuThread::resetVM);
 	connect(m_ui.actionPause, &QAction::toggled, thread, &EmuThread::setVMPaused);
@@ -396,18 +354,6 @@ void MainWindow::recreate()
 	new_main_window->refreshGameList(false);
 	new_main_window->show();
 	deleteLater();
-}
-
-void MainWindow::updateApplicationTheme()
-{
-	if (!s_unthemed_style_name_set)
-	{
-		s_unthemed_style_name_set = true;
-		s_unthemed_style_name = QApplication::style()->objectName();
-	}
-
-	setStyleFromSettings();
-	setIconThemeFromStyle();
 }
 
 void MainWindow::setStyleFromSettings()
@@ -551,7 +497,6 @@ void MainWindow::setStyleFromSettings()
 		darkPalette.setColor(QPalette::Link, blue);
 		darkPalette.setColor(QPalette::Highlight, lighterGray);
 		darkPalette.setColor(QPalette::HighlightedText, Qt::white);
-		darkPalette.setColor(QPalette::PlaceholderText, QColor(Qt::white).darker());
 
 		darkPalette.setColor(QPalette::Active, QPalette::Button, gray.darker());
 		darkPalette.setColor(QPalette::Disabled, QPalette::ButtonText, gray);
@@ -587,7 +532,6 @@ void MainWindow::setStyleFromSettings()
 		darkPalette.setColor(QPalette::Link, blue);
 		darkPalette.setColor(QPalette::Highlight, blue2);
 		darkPalette.setColor(QPalette::HighlightedText, Qt::white);
-		darkPalette.setColor(QPalette::PlaceholderText, QColor(Qt::white).darker());
 
 		darkPalette.setColor(QPalette::Active, QPalette::Button, gray.darker());
 		darkPalette.setColor(QPalette::Disabled, QPalette::ButtonText, gray);
@@ -633,64 +577,11 @@ void MainWindow::setStyleFromSettings()
 
 		qApp->setStyleSheet("QToolTip { color: #ffffff; background-color: #2a82da; border: 1px solid white; }");
 	}
-	else if (theme == "Ruby")
-	{
-		// Custom pallete by Daisouji, Black as main color andd Red as complimentary.
-		// Alternative dark theme.
-		qApp->setStyle(QStyleFactory::create("Fusion"));
-
-		const QColor gray(128, 128, 128);
-		const QColor slate(18, 18, 18);
-		const QColor rubyish(172, 21, 31);
-
-		QPalette darkPalette;
-		darkPalette.setColor(QPalette::Window, slate);
-		darkPalette.setColor(QPalette::WindowText, Qt::white);
-		darkPalette.setColor(QPalette::Base, slate.lighter());
-		darkPalette.setColor(QPalette::AlternateBase, slate.lighter());
-		darkPalette.setColor(QPalette::ToolTipBase, slate);
-		darkPalette.setColor(QPalette::ToolTipText, Qt::white);
-		darkPalette.setColor(QPalette::Text, Qt::white);
-		darkPalette.setColor(QPalette::Button, slate);
-		darkPalette.setColor(QPalette::ButtonText, Qt::white);
-		darkPalette.setColor(QPalette::Link, Qt::white);
-		darkPalette.setColor(QPalette::Highlight, rubyish);
-		darkPalette.setColor(QPalette::HighlightedText, Qt::white);
-
-		darkPalette.setColor(QPalette::Active, QPalette::Button, slate.lighter());
-		darkPalette.setColor(QPalette::Disabled, QPalette::ButtonText, gray);
-		darkPalette.setColor(QPalette::Disabled, QPalette::WindowText, gray);
-		darkPalette.setColor(QPalette::Disabled, QPalette::Text, gray);
-		darkPalette.setColor(QPalette::Disabled, QPalette::Light, slate.lighter());
-
-		qApp->setPalette(darkPalette);
-
-		qApp->setStyleSheet("QToolTip { color: #ffffff; background-color: #2a82da; border: 1px solid white; }");
-	}
-	else if (theme == "Custom")
-	{
-
-		//Additional Theme option than loads .qss from main PCSX2 Directory
-		qApp->setStyle(QStyleFactory::create("Fusion"));
-
-		QString sheet_content;
-		QFile sheets(QString::fromStdString(Path::Combine(EmuFolders::DataRoot, "custom.qss")));
-
-		if (sheets.open(QFile::ReadOnly))
-		{
-			QString sheet_content = QString::fromUtf8(sheets.readAll().data());
-			qApp->setStyleSheet(sheet_content);
-		}
-		else
-		{
-			qApp->setStyle(QStyleFactory::create("Fusion"));
-		}
-	}
 	else
 	{
 		qApp->setPalette(QApplication::style()->standardPalette());
 		qApp->setStyleSheet(QString());
-		qApp->setStyle(s_unthemed_style_name);
+		qApp->setStyle(m_unthemed_style_name);
 	}
 }
 
@@ -802,6 +693,7 @@ void MainWindow::updateEmulationActions(bool starting, bool running)
 	m_ui.menuSaveState->setEnabled(running);
 	m_ui.menuWindowSize->setEnabled(starting_or_running);
 
+	m_ui.actionFullscreen->setEnabled(starting_or_running);
 	m_ui.actionViewGameProperties->setEnabled(running);
 
 	m_game_list_widget->setDisabled(starting && !running);
@@ -830,11 +722,8 @@ void MainWindow::updateStatusBarWidgetVisibility()
 		}
 	};
 
-	Update(m_status_verbose_widget, s_vm_valid, 1);
-	Update(m_status_renderer_widget, s_vm_valid, 0);
-	Update(m_status_resolution_widget, s_vm_valid, 0);
+	Update(m_status_gs_widget, s_vm_valid && !s_vm_paused, 1);
 	Update(m_status_fps_widget, s_vm_valid, 0);
-	Update(m_status_vps_widget, s_vm_valid, 0);
 }
 
 void MainWindow::updateWindowTitle()
@@ -865,7 +754,7 @@ void MainWindow::updateWindowState(bool force_visible)
 	if (m_is_closing)
 		return;
 
-	const bool hide_window = !isRenderingToMain() && shouldHideMainWindow();
+	const bool hide_window = !g_emu_thread->isRenderingToMain() && Host::GetBaseBoolSettingValue("UI", "HideMainWindowWhenRunning", false);
 	const bool disable_resize = Host::GetBaseBoolSettingValue("UI", "DisableWindowResize", false);
 	const bool has_window = s_vm_valid || m_display_widget;
 
@@ -886,9 +775,8 @@ void MainWindow::updateWindowState(bool force_visible)
 
 void MainWindow::setProgressBar(int current, int total)
 {
-	const int value = (total != 0) ? ((current * 100) / total) : 0;
-	if (m_status_progress_widget->value() != value)
-		m_status_progress_widget->setValue(value);
+	m_status_progress_widget->setValue(current);
+	m_status_progress_widget->setMaximum(total);
 
 	if (m_status_progress_widget->isVisible())
 		return;
@@ -908,10 +796,7 @@ void MainWindow::clearProgressBar()
 
 bool MainWindow::isShowingGameList() const
 {
-	if (s_use_central_widget)
-		return (centralWidget() == m_game_list_widget);
-	else
-		return (m_ui.mainContainer->currentIndex() == 0);
+	return (centralWidget() == m_game_list_widget);
 }
 
 bool MainWindow::isRenderingFullscreen() const
@@ -920,15 +805,12 @@ bool MainWindow::isRenderingFullscreen() const
 	if (!display || !m_display_widget)
 		return false;
 
-	return getDisplayContainer()->isFullScreen() || display->IsFullscreen();
+	return (m_display_widget->parent() != this && (m_display_widget->isFullScreen() || display->IsFullscreen()));
 }
 
 bool MainWindow::isRenderingToMain() const
 {
-	if (s_use_central_widget)
-		return (m_display_widget && centralWidget() == m_display_widget);
-	else
-		return (m_display_widget && m_ui.mainContainer->indexOf(m_display_widget) == 1);
+	return (m_display_widget && m_display_widget->parent() == this);
 }
 
 bool MainWindow::shouldHideMouseCursor() const
@@ -936,20 +818,15 @@ bool MainWindow::shouldHideMouseCursor() const
 	return isRenderingFullscreen() && Host::GetBoolSettingValue("UI", "HideMouseCursor", false);
 }
 
-bool MainWindow::shouldHideMainWindow() const
-{
-	return Host::GetBaseBoolSettingValue("UI", "HideMainWindowWhenRunning", false) || isRenderingFullscreen() || QtHost::InNoGUIMode();
-}
-
 void MainWindow::switchToGameListView()
 {
-	if (isShowingGameList())
+	if (centralWidget() == m_game_list_widget)
 	{
 		m_game_list_widget->setFocus();
 		return;
 	}
 
-	if (s_vm_valid)
+	if (m_display_created)
 	{
 		m_was_paused_on_surface_loss = s_vm_paused;
 		if (!s_vm_paused)
@@ -960,11 +837,17 @@ void MainWindow::switchToGameListView()
 		while (m_display_widget)
 			QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
 	}
+
+	pxAssertMsg(!centralWidget(), "Should not have a central widget at game list switch time");
+	takeCentralWidget();
+	setCentralWidget(m_game_list_widget);
+	m_game_list_widget->setVisible(true);
+	m_game_list_widget->setFocus();
 }
 
 void MainWindow::switchToEmulationView()
 {
-	if (!s_vm_valid || !isShowingGameList())
+	if (!m_display_created || (m_display_widget && centralWidget() == m_display_widget))
 		return;
 
 	// we're no longer surfaceless! this will call back to UpdateDisplay(), which will swap the widget out.
@@ -1062,10 +945,10 @@ bool MainWindow::requestShutdown(bool allow_confirm /* = true */, bool allow_sav
 
 	if (!m_is_closing && QtHost::InBatchMode())
 	{
-		// If we don't set the closing flag here, the VM shutdown may not complete by the time closeEvent() is called,
-		// leading to a confirm.
+		// Closing the window should shut down everything. If we don't set the closing flag here,
+		// the VM shutdown may not complete by the time closeEvent() is called, leading to a confirm.
 		m_is_closing = true;
-		QGuiApplication::quit();
+		close();
 	}
 
 	return true;
@@ -1077,9 +960,7 @@ void MainWindow::requestExit()
 	if (!requestShutdown(true, true, true))
 		return;
 
-	// We could use close here, but if we're not visible (e.g. quitting from fullscreen), closing the window
-	// doesn't quit the application.
-	QGuiApplication::quit();
+	close();
 }
 
 void MainWindow::checkForSettingChanges()
@@ -1327,7 +1208,7 @@ void MainWindow::onViewGameGridActionTriggered()
 
 void MainWindow::onViewSystemDisplayTriggered()
 {
-	if (s_vm_valid)
+	if (m_display_created)
 		switchToEmulationView();
 }
 
@@ -1441,15 +1322,23 @@ void MainWindow::onToolsOpenDataDirectoryTriggered()
 	QtUtils::OpenURL(this, QUrl::fromLocalFile(path));
 }
 
-void MainWindow::updateTheme()
+void MainWindow::onThemeChanged()
 {
-	updateApplicationTheme();
-	m_game_list_widget->refreshImages();
+	setStyleFromSettings();
+	setIconThemeFromStyle();
+	recreate();
+}
+
+void MainWindow::onThemeChangedFromSettings()
+{
+	// reopen the settings dialog after recreating
+	onThemeChanged();
+	g_main_window->doSettings();
 }
 
 void MainWindow::onLoggingOptionChanged()
 {
-	Host::UpdateLogging(QtHost::InNoGUIMode());
+	Host::UpdateLogging();
 }
 
 void MainWindow::onInputRecNewActionTriggered()
@@ -1561,8 +1450,7 @@ void MainWindow::onVMPaused()
 	s_vm_paused = true;
 	updateWindowTitle();
 	updateStatusBarWidgetVisibility();
-	m_last_fps_status = m_status_verbose_widget->text();
-	m_status_verbose_widget->setText(tr("Paused"));
+	m_status_fps_widget->setText(tr("Paused"));
 	if (m_display_widget)
 	{
 		m_display_widget->updateRelativeMode(false);
@@ -1582,8 +1470,7 @@ void MainWindow::onVMResumed()
 	m_was_disc_change_request = false;
 	updateWindowTitle();
 	updateStatusBarWidgetVisibility();
-	m_status_verbose_widget->setText(m_last_fps_status);
-	m_last_fps_status = QString();
+	m_status_fps_widget->setText(m_last_fps_status);
 	if (m_display_widget)
 	{
 		m_display_widget->updateRelativeMode(true);
@@ -1623,6 +1510,13 @@ void MainWindow::onGameChanged(const QString& path, const QString& serial, const
 	updateSaveStateMenus(path, serial, crc);
 }
 
+void MainWindow::onPerformanceMetricsUpdated(const QString& fps_stat, const QString& gs_stat)
+{
+	m_last_fps_status = fps_stat;
+	m_status_fps_widget->setText(m_last_fps_status);
+	m_status_gs_widget->setText(gs_stat);
+}
+
 void MainWindow::showEvent(QShowEvent* event)
 {
 	QMainWindow::showEvent(event);
@@ -1641,6 +1535,9 @@ void MainWindow::closeEvent(QCloseEvent* event)
 		event->ignore();
 		return;
 	}
+
+	if (g_emu_thread->isRunningFullscreenUI())
+		g_emu_thread->stopFullscreenUI();
 
 	saveStateToConfig();
 	m_is_closing = true;
@@ -1712,7 +1609,44 @@ DisplayWidget* MainWindow::createDisplay(bool fullscreen, bool render_to_main)
 	const std::string fullscreen_mode(Host::GetBaseStringSettingValue("EmuCore/GS", "FullscreenMode", ""));
 	const bool is_exclusive_fullscreen = (fullscreen && !fullscreen_mode.empty() && host_display->SupportsFullscreen());
 
-	createDisplayWidget(fullscreen, render_to_main, is_exclusive_fullscreen);
+	QWidget* container;
+	if (DisplayContainer::IsNeeded(fullscreen, render_to_main))
+	{
+		m_display_container = new DisplayContainer();
+		m_display_widget = new DisplayWidget(m_display_container);
+		m_display_container->setDisplayWidget(m_display_widget);
+		container = m_display_container;
+	}
+	else
+	{
+		m_display_widget = new DisplayWidget((!fullscreen && render_to_main) ? this : nullptr);
+		container = m_display_widget;
+	}
+
+	if (fullscreen || !render_to_main)
+	{
+		container->setWindowTitle(windowTitle());
+		container->setWindowIcon(windowIcon());
+	}
+
+	if (fullscreen)
+	{
+		if (!is_exclusive_fullscreen)
+			container->showFullScreen();
+		else
+			container->showNormal();
+	}
+	else if (!render_to_main)
+	{
+		restoreDisplayWindowGeometryFromConfig();
+		container->showNormal();
+	}
+	else
+	{
+		m_game_list_widget->setVisible(false);
+		takeCentralWidget();
+		setCentralWidget(m_display_widget);
+	}
 
 	// we need the surface visible.. this might be able to be replaced with something else
 	QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
@@ -1721,7 +1655,7 @@ DisplayWidget* MainWindow::createDisplay(bool fullscreen, bool render_to_main)
 	if (!wi.has_value())
 	{
 		QMessageBox::critical(this, tr("Error"), tr("Failed to get window info from widget"));
-		destroyDisplayWidget(true);
+		destroyDisplayWidget();
 		return nullptr;
 	}
 
@@ -1731,9 +1665,11 @@ DisplayWidget* MainWindow::createDisplay(bool fullscreen, bool render_to_main)
 			Host::GetBoolSettingValue("EmuCore/GS", "ThreadedPresentation", false), Host::GetBoolSettingValue("EmuCore/GS", "UseDebugDevice", false)))
 	{
 		QMessageBox::critical(this, tr("Error"), tr("Failed to create host display device context."));
-		destroyDisplayWidget(true);
+		destroyDisplayWidget();
 		return nullptr;
 	}
+
+	m_display_created = true;
 
 	if (is_exclusive_fullscreen)
 		setDisplayFullscreen(fullscreen_mode);
@@ -1741,13 +1677,15 @@ DisplayWidget* MainWindow::createDisplay(bool fullscreen, bool render_to_main)
 	updateWindowTitle();
 	updateWindowState();
 
+	m_display_widget->setFocus();
+	m_ui.actionStartFullscreenUI->setEnabled(false);
+	m_ui.actionStartFullscreenUI2->setEnabled(false);
 	m_ui.actionViewSystemDisplay->setEnabled(true);
-	m_ui.actionFullscreen->setEnabled(true);
 
+	m_display_widget->setFocus();
 	m_display_widget->setShouldHideCursor(shouldHideMouseCursor());
 	m_display_widget->updateRelativeMode(s_vm_valid && !s_vm_paused);
 	m_display_widget->updateCursor(s_vm_valid && !s_vm_paused);
-	m_display_widget->setFocus();
 
 	host_display->DoneRenderContextCurrent();
 	return m_display_widget;
@@ -1771,7 +1709,7 @@ DisplayWidget* MainWindow::updateDisplay(bool fullscreen, bool render_to_main, b
 	// Skip recreating the surface if we're just transitioning between fullscreen and windowed with render-to-main off.
 	// .. except on Wayland, where everything tends to break if you don't recreate.
 	const bool has_container = (m_display_container != nullptr);
-	const bool needs_container = DisplayContainer::isNeeded(fullscreen, render_to_main);
+	const bool needs_container = DisplayContainer::IsNeeded(fullscreen, render_to_main);
 	if (!is_rendering_to_main && !render_to_main && !is_exclusive_fullscreen && has_container == needs_container && !needs_container && !changing_surfaceless)
 	{
 		DevCon.WriteLn("Toggling to %s without recreating surface", (fullscreen ? "fullscreen" : "windowed"));
@@ -1803,19 +1741,66 @@ DisplayWidget* MainWindow::updateDisplay(bool fullscreen, bool render_to_main, b
 
 	host_display->DestroyRenderSurface();
 
-	destroyDisplayWidget(surfaceless);
+	destroyDisplayWidget();
 
 	// if we're going to surfaceless, we're done here
 	if (surfaceless)
 		return nullptr;
 
-	createDisplayWidget(fullscreen, render_to_main, is_exclusive_fullscreen);
+	if (DisplayContainer::IsNeeded(fullscreen, render_to_main))
+	{
+		m_display_container = new DisplayContainer();
+		m_display_widget = new DisplayWidget(m_display_container);
+		m_display_container->setDisplayWidget(m_display_widget);
+		container = m_display_container;
+	}
+	else
+	{
+		m_display_widget = new DisplayWidget((!fullscreen && render_to_main) ? this : nullptr);
+		container = m_display_widget;
+	}
+
+	if (fullscreen || !render_to_main)
+	{
+		container->setWindowTitle(windowTitle());
+		container->setWindowIcon(windowIcon());
+
+		// make sure the game list widget is still visible
+		if (centralWidget() != m_game_list_widget && !fullscreen)
+		{
+			setCentralWidget(m_game_list_widget);
+			m_game_list_widget->setVisible(true);
+		}
+	}
+
+	if (fullscreen)
+	{
+		if (!is_exclusive_fullscreen)
+			container->showFullScreen();
+		else
+			container->showNormal();
+	}
+	else if (!render_to_main)
+	{
+		restoreDisplayWindowGeometryFromConfig();
+		container->showNormal();
+	}
+	else
+	{
+		m_game_list_widget->setVisible(false);
+		takeCentralWidget();
+		setCentralWidget(m_display_widget);
+		m_display_widget->setFocus();
+	}
+
+	// we need the surface visible.. this might be able to be replaced with something else
+	QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
 
 	std::optional<WindowInfo> wi = m_display_widget->getWindowInfo();
 	if (!wi.has_value())
 	{
 		QMessageBox::critical(this, tr("Error"), tr("Failed to get new window info from widget"));
-		destroyDisplayWidget(true);
+		destroyDisplayWidget();
 		return nullptr;
 	}
 
@@ -1838,73 +1823,6 @@ DisplayWidget* MainWindow::updateDisplay(bool fullscreen, bool render_to_main, b
 	QSignalBlocker blocker(m_ui.actionFullscreen);
 	m_ui.actionFullscreen->setChecked(fullscreen);
 	return m_display_widget;
-}
-
-void MainWindow::createDisplayWidget(bool fullscreen, bool render_to_main, bool is_exclusive_fullscreen)
-{
-	// If we're rendering to main and were hidden (e.g. coming back from fullscreen),
-	// make sure we're visible before trying to add ourselves. Otherwise Wayland breaks.
-	if (!fullscreen && render_to_main && !isVisible())
-	{
-		setVisible(true);
-		QGuiApplication::sync();
-	}
-
-	QWidget* container;
-	if (DisplayContainer::isNeeded(fullscreen, render_to_main))
-	{
-		m_display_container = new DisplayContainer();
-		m_display_widget = new DisplayWidget(m_display_container);
-		m_display_container->setDisplayWidget(m_display_widget);
-		container = m_display_container;
-	}
-	else
-	{
-		m_display_widget = new DisplayWidget((!fullscreen && render_to_main) ? getContentParent() : nullptr);
-		container = m_display_widget;
-	}
-
-	if (fullscreen || !render_to_main)
-	{
-		container->setWindowTitle(windowTitle());
-		container->setWindowIcon(windowIcon());
-	}
-
-	if (fullscreen)
-	{
-		// Don't risk doing this on Wayland, it really doesn't like window state changes,
-		// and positioning has no effect anyway.
-		if (!s_use_central_widget)
-			restoreDisplayWindowGeometryFromConfig();
-
-		if (!is_exclusive_fullscreen)
-			container->showFullScreen();
-		else
-			container->showNormal();
-	}
-	else if (!render_to_main)
-	{
-		restoreDisplayWindowGeometryFromConfig();
-		container->showNormal();
-	}
-	else if (s_use_central_widget)
-	{
-		m_game_list_widget->setVisible(false);
-		takeCentralWidget();
-		m_game_list_widget->setParent(this); // takeCentralWidget() removes parent
-		setCentralWidget(m_display_widget);
-		m_display_widget->setFocus();
-		update();
-	}
-	else
-	{
-		pxAssertRel(m_ui.mainContainer->count() == 1, "Has no display widget");
-		m_ui.mainContainer->addWidget(container);
-		m_ui.mainContainer->setCurrentIndex(1);
-	}
-
-	// We need the surface visible.
-	QGuiApplication::sync();
 }
 
 void MainWindow::displayResizeRequested(qint32 width, qint32 height)
@@ -1932,59 +1850,22 @@ void MainWindow::displayResizeRequested(qint32 width, qint32 height)
 void MainWindow::destroyDisplay()
 {
 	// Now we can safely destroy the display window.
-	destroyDisplayWidget(true);
+	destroyDisplayWidget();
 
+	// Switch back to game list view, we're not going back to display, so we can't use switchToGameListView().
+	if (centralWidget() != m_game_list_widget)
+	{
+		takeCentralWidget();
+		setCentralWidget(m_game_list_widget);
+		m_game_list_widget->setVisible(true);
+		m_game_list_widget->setFocus();
+	}
+
+	m_display_created = false;
+
+	m_ui.actionStartFullscreenUI->setEnabled(true);
+	m_ui.actionStartFullscreenUI2->setEnabled(true);
 	m_ui.actionViewSystemDisplay->setEnabled(false);
-	m_ui.actionFullscreen->setEnabled(false);
-}
-
-void MainWindow::destroyDisplayWidget(bool show_game_list)
-{
-	if (!m_display_widget)
-		return;
-
-	if (!isRenderingFullscreen() && !isRenderingToMain())
-		saveDisplayWindowGeometryToConfig();
-
-	if (m_display_container)
-		m_display_container->removeDisplayWidget();
-
-	if (isRenderingToMain())
-	{
-		if (s_use_central_widget)
-		{
-			pxAssertRel(centralWidget() == m_display_widget, "Display widget is currently central");
-			takeCentralWidget();
-			if (show_game_list)
-			{
-				m_game_list_widget->setVisible(true);
-				setCentralWidget(m_game_list_widget);
-				m_game_list_widget->resizeTableViewColumnsToFit();
-			}
-		}
-		else
-		{
-			pxAssertRel(m_ui.mainContainer->indexOf(m_display_widget) == 1, "Display widget in stack");
-			m_ui.mainContainer->removeWidget(m_display_widget);
-			if (show_game_list)
-			{
-				m_ui.mainContainer->setCurrentIndex(0);
-				m_game_list_widget->resizeTableViewColumnsToFit();
-			}
-		}
-	}
-
-	if (m_display_widget)
-	{
-		m_display_widget->deleteLater();
-		m_display_widget = nullptr;
-	}
-
-	if (m_display_container)
-	{
-		m_display_container->deleteLater();
-		m_display_container = nullptr;
-	}
 }
 
 void MainWindow::focusDisplayWidget()
@@ -2035,6 +1916,33 @@ void MainWindow::restoreDisplayWindowGeometryFromConfig()
 	}
 }
 
+void MainWindow::destroyDisplayWidget()
+{
+	if (!m_display_widget)
+		return;
+
+	if (!isRenderingFullscreen() && !isRenderingToMain())
+		saveDisplayWindowGeometryToConfig();
+
+	if (m_display_container)
+		m_display_container->removeDisplayWidget();
+
+	if (m_display_widget == centralWidget())
+		takeCentralWidget();
+
+	if (m_display_widget)
+	{
+		m_display_widget->deleteLater();
+		m_display_widget = nullptr;
+	}
+
+	if (m_display_container)
+	{
+		m_display_container->deleteLater();
+		m_display_container = nullptr;
+	}
+}
+
 void MainWindow::setDisplayFullscreen(const std::string& fullscreen_mode)
 {
 	u32 width, height;
@@ -2058,7 +1966,7 @@ SettingsDialog* MainWindow::getSettingsDialog()
 	{
 		m_settings_dialog = new SettingsDialog(this);
 		connect(
-			m_settings_dialog->getInterfaceSettingsWidget(), &InterfaceSettingsWidget::themeChanged, this, &MainWindow::updateTheme);
+			m_settings_dialog->getInterfaceSettingsWidget(), &InterfaceSettingsWidget::themeChanged, this, &MainWindow::onThemeChangedFromSettings);
 	}
 
 	return m_settings_dialog;

@@ -225,6 +225,7 @@ private:
 
 	GLuint m_fbo; // frame buffer container
 	GLuint m_fbo_read; // frame buffer container only for reading
+	GLuint m_fbo_write;	// frame buffer container only for writing
 
 	std::unique_ptr<GL::StreamBuffer> m_vertex_stream_buffer;
 	std::unique_ptr<GL::StreamBuffer> m_index_stream_buffer;
@@ -376,6 +377,9 @@ public:
 	void OMSetBlendState(bool enable = false, GLenum src_factor = GL_ONE, GLenum dst_factor = GL_ZERO, GLenum op = GL_FUNC_ADD, bool is_constant = false, u8 constant = 0);
 	void OMSetRenderTargets(GSTexture* rt, GSTexture* ds, const GSVector4i* scissor = NULL);
 	void OMSetColorMaskState(OMColorMaskSelector sel = OMColorMaskSelector());
+
+	bool HasColorSparse() final { return GLLoader::found_compatible_GL_ARB_sparse_texture2; }
+	bool HasDepthSparse() final { return GLLoader::found_compatible_sparse_depth; }
 
 	bool CreateTextureFX();
 	std::string GetShaderSource(const std::string_view& entry, GLenum type, const std::string_view& common_header, const std::string_view& glsl_h_code, const std::string_view& macro_sel);

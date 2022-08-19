@@ -15,11 +15,9 @@
 
 #pragma once
 #include "pcsx2/Frontend/GameList.h"
-#include "common/LRUCache.h"
 #include <QtCore/QAbstractTableModel>
 #include <QtGui/QPixmap>
 #include <algorithm>
-#include <atomic>
 #include <array>
 #include <optional>
 #include <unordered_map>
@@ -47,9 +45,6 @@ public:
 	static std::optional<Column> getColumnIdForName(std::string_view name);
 	static const char* getColumnName(Column col);
 
-	static QIcon getIconForType(GameList::EntryType type);
-	static QIcon getIconForRegion(GameList::Region region);
-
 	GameListModel(QObject* parent = nullptr);
 	~GameListModel();
 
@@ -61,7 +56,6 @@ public:
 	__fi const QString& getColumnDisplayName(int column) { return m_column_display_names[column]; }
 
 	void refresh();
-	void refreshImages();
 
 	bool titlesLessThan(int left_row, int right_row) const;
 
@@ -76,24 +70,23 @@ public:
 	int getCoverArtHeight() const;
 	int getCoverArtSpacing() const;
 	void refreshCovers();
-	void updateCacheSize(int width, int height);
 
 private:
 	void loadCommonImages();
 	void setColumnDisplayNames();
-	void loadOrGenerateCover(const GameList::Entry* ge);
-	void invalidateCoverForPath(const std::string& path);
 
-	float m_cover_scale = 0.0f;
-	std::atomic<u32> m_cover_scale_counter{0};
+	float m_cover_scale = 1.0f;
 	bool m_show_titles_for_covers = false;
 
 	std::array<QString, Column_Count> m_column_display_names;
-	std::array<QPixmap, static_cast<u32>(GameList::EntryType::Count)> m_type_pixmaps;
-	std::array<QPixmap, static_cast<u32>(GameList::Region::Count)> m_region_pixmaps;
+
+	QPixmap m_type_disc_pixmap;
+	QPixmap m_type_disc_with_settings_pixmap;
+	QPixmap m_type_exe_pixmap;
+	QPixmap m_type_playlist_pixmap;
+	QPixmap m_region_pixmaps[static_cast<u32>(GameList::Region::Count)];
 	QPixmap m_placeholder_pixmap;
-	QPixmap m_loading_pixmap;
 
 	std::array<QPixmap, static_cast<int>(GameList::CompatibilityRatingCount)> m_compatibility_pixmaps;
-	mutable LRUCache<std::string, QPixmap> m_cover_pixmap_cache;
+	mutable std::unordered_map<std::string, QPixmap> m_cover_pixmap_cache;
 };

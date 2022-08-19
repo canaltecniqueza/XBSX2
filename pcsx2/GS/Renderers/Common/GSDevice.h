@@ -289,6 +289,7 @@ struct alignas(16) GSHWDrawConfig
 				u32 urban_chaos_hle : 1;
 				u32 tales_of_abyss_hle : 1;
 				u32 tex_is_fb : 1; // Jak Shadows
+				u32 tex_is_ds : 1;
 				u32 automatic_lod : 1;
 				u32 manual_lod : 1;
 				u32 point_sampler : 1;
@@ -314,7 +315,7 @@ struct alignas(16) GSHWDrawConfig
 		{
 			const u32 sw_blend_bits = blend_a | blend_b | blend_d;
 			const bool sw_blend_needs_rt = sw_blend_bits != 0 && ((sw_blend_bits | blend_c) & 1u);
-			return tex_is_fb || fbmask || (date > 0 && date != 3) || sw_blend_needs_rt;
+			return tex_is_fb || tex_is_ds || fbmask || (date > 0 && date != 3) || sw_blend_needs_rt;
 		}
 
 		/// Disables color output from the pixel shader, this is done when all channels are masked.
@@ -636,7 +637,9 @@ public:
 		bool dxt_textures         : 1; ///< Supports DXTn texture compression, i.e. S3TC and BC1-3.
 		bool bptc_textures        : 1; ///< Supports BC6/7 texture compression.
 		bool framebuffer_fetch    : 1; ///< Can sample from the framebuffer without texture barriers.
+		bool depth_fetch          : 1; ///< Can sample from the depth buffer without texture barriers.
 		bool dual_source_blend    : 1; ///< Can use alpha output as a blend factor.
+		bool clip_control         : 1; ///< Can use 0..1 depth range instead of -1..1.
 		bool stencil_buffer       : 1; ///< Supports stencil buffer, and can use for DATE.
 		FeatureSupport()
 		{

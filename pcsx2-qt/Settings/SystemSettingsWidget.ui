@@ -89,7 +89,7 @@
        <widget class="QComboBox" name="eeCycleSkipping">
         <item>
          <property name="text">
-          <string>None</string>
+          <string>Normal</string>
          </property>
         </item>
         <item>

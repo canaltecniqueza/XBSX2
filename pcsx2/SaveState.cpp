@@ -409,6 +409,7 @@ static void SysState_ComponentFreezeOutRoot(void* dest, SysState_Component comp)
 
 static void SysState_ComponentFreezeIn(zip_file_t* zf, SysState_Component comp)
 {
+
 	freezeData fP = { 0, nullptr };
 	if (comp.freeze(FreezeAction::Size, &fP) != 0)
 		fP.size = 0;
@@ -632,8 +633,6 @@ public:
 	void FreezeOut(SaveStateBase& writer) const { return SysState_ComponentFreezeOut(writer, GS); }
 	bool IsRequired() const { return true; }
 };
-
-
 
 // (cpuRegs, iopRegs, VPU/GIF/DMAC structures should all remain as part of a larger unified
 //  block, since they're all PCSX2-dependent and having separate files in the archie for them
@@ -980,7 +979,7 @@ static void CheckVersion(const std::string& filename, zip_t* zf)
 			.SetUserMsg("Cannot load this savestate. The state is an unsupported version.");
 }
 
-static zip_int64_t CheckFileExistsInState(zip_t* zf, const char* name)
+static zip_int64_t CheckFileExistsInState(zip_t* zf, const char* name, bool required)
 {
 	zip_int64_t index = zip_name_locate(zf, name, /*ZIP_FL_NOCASE*/ 0);
 	if (index >= 0)
@@ -989,8 +988,10 @@ static zip_int64_t CheckFileExistsInState(zip_t* zf, const char* name)
 		return index;
 	}
 
-	Console.WriteLn(Color_Red, " ... not found '%s'!", name);
-	return index;
+	if (required)
+		Console.WriteLn(Color_Red, " ... not found '%s'!", name);
+	else
+		DevCon.WriteLn(Color_Red, " ... not found '%s'!", name);
 }
 
 static bool LoadInternalStructuresState(zip_t* zf, s64 index)
@@ -1028,15 +1029,16 @@ void SaveState_UnzipFromDisk(const std::string& filename)
 	CheckVersion(filename, zf.get());
 
 	// check that all parts are included
-	const s64 internal_index = CheckFileExistsInState(zf.get(), EntryFilename_InternalStructures);
+	const s64 internal_index = CheckFileExistsInState(zf.get(), EntryFilename_InternalStructures, true);
 	s64 entryIndices[std::size(SavestateEntries)];
 
 	// Log any parts and pieces that are missing, and then generate an exception.
 	bool throwIt = (internal_index < 0);
 	for (u32 i = 0; i < std::size(SavestateEntries); i++)
 	{
-		entryIndices[i] = CheckFileExistsInState(zf.get(), SavestateEntries[i]->GetFilename());
-		if (entryIndices[i] < 0 && SavestateEntries[i]->IsRequired())
+		const bool required = SavestateEntries[i]->IsRequired();
+		entryIndices[i] = CheckFileExistsInState(zf.get(), SavestateEntries[i]->GetFilename(), required);
+		if (entryIndices[i] < 0 && required)
 			throwIt = true;
 	}
 
@@ -1051,7 +1053,10 @@ void SaveState_UnzipFromDisk(const std::string& filename)
 		for (u32 i = 0; i < std::size(SavestateEntries); ++i)
 		{
 			if (entryIndices[i] < 0)
+			{
+				SavestateEntries[i]->FreezeIn(nullptr);
 				continue;
+			}
 
 			auto zff = zip_fopen_index_managed(zf.get(), entryIndices[i], 0);
 			if (!zff)

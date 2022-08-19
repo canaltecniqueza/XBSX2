@@ -51,11 +51,11 @@
 #include "PAD/Host/PAD.h"
 #include "Sio.h"
 #include "ps2/BiosTools.h"
-#include "Recording/InputRecordingControls.h"
 
 #include "DebugTools/MIPSAnalyst.h"
 #include "DebugTools/SymbolMap.h"
 
+#include "Frontend/FullscreenUI.h"
 #include "Frontend/INISettingsInterface.h"
 #include "Frontend/InputManager.h"
 #include "Frontend/GameList.h"
@@ -71,7 +71,6 @@
 
 namespace VMManager
 {
-	static void LoadSettings();
 	static void ApplyGameFixes();
 	static bool UpdateGameSettingsLayer();
 	static void CheckForConfigChanges(const Pcsx2Config& old_config);
@@ -136,6 +135,7 @@ static s32 s_current_save_slot = 1;
 static u32 s_frame_advance_count = 0;
 static u32 s_mxcsr_saved;
 static std::optional<LimiterModeType> s_limiter_mode_prior_to_hold_interaction;
+static bool s_gs_open_on_initialize = false;
 
 bool VMManager::PerformEarlyHardwareChecks(const char** error)
 {
@@ -184,7 +184,8 @@ void VMManager::SetState(VMState state)
 
 	if (state != VMState::Stopping && (state == VMState::Paused || old_state == VMState::Paused))
 	{
-		if (state == VMState::Paused)
+		const bool paused = (state == VMState::Paused);
+		if (paused)
 		{
 			if (THREAD_VU1)
 				vu1Thread.WaitVU();
@@ -197,11 +198,19 @@ void VMManager::SetState(VMState state)
 			frameLimitReset();
 		}
 
-		SPU2SetOutputPaused(state == VMState::Paused);
-		if (state == VMState::Paused)
+		SPU2SetOutputPaused(paused);
+
+		// Host notification comes last after everything else.
+		if (paused)
+		{
 			Host::OnVMPaused();
+			FullscreenUI::OnVMPaused();
+		}
 		else
+		{
 			Host::OnVMResumed();
+			FullscreenUI::OnVMResumed();
+		}
 	}
 }
 
@@ -254,6 +263,12 @@ bool VMManager::Internal::InitializeGlobals()
 	x86caps.SIMD_EstablishMXCSRmask();
 	x86caps.CalculateMHz();
 	SysLogMachineCaps();
+
+	if (GSinit() != 0)
+	{
+		Host::ReportErrorAsync("Error", "Failed to initialize GS (GSinit()).");
+		return false;
+	}
 
 	return true;
 }
@@ -601,11 +616,11 @@ void VMManager::LoadPatches(const std::string& serial, u32 crc, bool show_messag
 		if (cheat_count > 0 || s_active_widescreen_patches > 0 || s_active_no_interlacing_patches > 0)
 		{
 			message += " are active.";
-			Host::AddKeyedOSDMessage("LoadPatches", std::move(message), 5.0f);
+			Host::AddKeyedOSDMessage("LoadPatches", std::move(message), 3.0f);
 		}
 		else if (show_messages_when_disabled)
 		{
-			Host::AddKeyedOSDMessage("LoadPatches", "No cheats or patches (widescreen, compatibility or others) are found / enabled.", 8.0f);
+			Host::AddKeyedOSDMessage("LoadPatches", "No cheats or patches (widescreen, compatibility or others) are found / enabled.", 3.0f);
 		}
 	}
 }
@@ -670,6 +685,12 @@ void VMManager::UpdateRunningGame(bool resetting, bool game_starting)
 	GetMTGS().SendGameCRC(new_crc);
 
 	Host::OnGameChanged(s_disc_path, s_game_serial, s_game_name, s_game_crc);
+	if (FullscreenUI::IsInitialized())
+	{
+		GetMTGS().RunOnGSThread([disc_path = s_disc_path, game_serial = s_game_serial, game_name = s_game_name, game_crc = s_game_crc]() {
+			FullscreenUI::OnRunningGameChanged(std::move(disc_path), std::move(game_serial), std::move(game_name), game_crc);
+		});
+	}
 
 #if 0
 	// TODO: Enable this when the debugger is added to Qt, and it's active. Otherwise, this is just a waste of time.
@@ -857,14 +878,18 @@ bool VMManager::Initialize(const VMBootParameters& boot_params)
 	ScopedGuard close_cdvd = [] { DoCDVDclose(); };
 
 	Console.WriteLn("Opening GS...");
-	if (!GetMTGS().WaitForOpen())
+	s_gs_open_on_initialize = GetMTGS().IsOpen();
+	if (!s_gs_open_on_initialize && !GetMTGS().WaitForOpen())
 	{
 		// we assume GS is going to report its own error
 		Console.WriteLn("Failed to open GS.");
 		return false;
 	}
 
-	ScopedGuard close_gs = []() { GetMTGS().WaitForClose(); };
+	ScopedGuard close_gs = []() {
+		if (!s_gs_open_on_initialize)
+			GetMTGS().WaitForClose();
+	};
 
 	Console.WriteLn("Opening SPU2...");
 	if (SPU2init() != 0 || SPU2open() != 0)
@@ -951,6 +976,7 @@ bool VMManager::Initialize(const VMBootParameters& boot_params)
 	Console.WriteLn("VM subsystems initialized in %.2f ms", init_timer.GetTimeMilliseconds());
 	s_state.store(VMState::Paused, std::memory_order_release);
 	Host::OnVMStarted();
+	FullscreenUI::OnVMStarted();
 
 	UpdateRunningGame(true, false);
 
@@ -973,6 +999,7 @@ bool VMManager::Initialize(const VMBootParameters& boot_params)
 
 void VMManager::Shutdown(bool save_resume_state)
 {
+
 	// we'll probably already be stopping (this is how Qt calls shutdown),
 	// but just in case, so any of the stuff we call here knows we don't have a valid VM.
 	s_state.store(VMState::Stopping, std::memory_order_release);
@@ -1028,7 +1055,8 @@ void VMManager::Shutdown(bool save_resume_state)
 	DoCDVDclose();
 	FWclose();
 	FileMcd_EmuClose();
-	GetMTGS().WaitForClose();
+	if (!s_gs_open_on_initialize)
+		GetMTGS().WaitForClose();
 	USBshutdown();
 	SPU2shutdown();
 	PADshutdown();
@@ -1039,6 +1067,7 @@ void VMManager::Shutdown(bool save_resume_state)
 
 	s_state.store(VMState::Shutdown, std::memory_order_release);
 	Host::OnVMDestroyed();
+	FullscreenUI::OnVMDestroyed();
 }
 
 void VMManager::Reset()
@@ -1309,19 +1338,19 @@ bool VMManager::ChangeDisc(CDVD_SourceType source, std::string path)
 	if (result)
 	{
 		if (source == CDVD_SourceType::NoDisc)
-			Host::AddKeyedOSDMessage("ChangeDisc", "Disc removed.", 5.0f);
+			Host::AddKeyedOSDMessage("ChangeDisc", "Disc removed.", 3.0f);
 		else
-			Host::AddKeyedOSDMessage("ChangeDisc", fmt::format("Disc changed to '{}'.", display_name), 5.0f);
+			Host::AddKeyedOSDMessage("ChangeDisc", fmt::format("Disc changed to '{}'.", display_name), 3.0f);
 	}
 	else
 	{
-		Host::AddKeyedOSDMessage("ChangeDisc", fmt::format("Failed to open new disc image '{}'. Reverting to old image.", display_name), 20.0f);
+		Host::AddKeyedOSDMessage("ChangeDisc", fmt::format("Failed to open new disc image '{}'. Reverting to old image.", display_name), 3.0f);
 		CDVDsys_ChangeSource(old_type);
 		if (!old_path.empty())
 			CDVDsys_SetFile(old_type, std::move(old_path));
 		if (!DoCDVDopen())
 		{
-			Host::AddKeyedOSDMessage("ChangeDisc", "Failed to switch back to old disc image. Removing disc.", 20.0f);
+			Host::AddKeyedOSDMessage("ChangeDisc", "Failed to switch back to old disc image. Removing disc.", 3.0f);
 			CDVDsys_ChangeSource(CDVD_SourceType::NoDisc);
 			DoCDVDopen();
 		}
@@ -1411,6 +1440,7 @@ void VMManager::Internal::GameStartingOnCPUThread()
 void VMManager::Internal::VSyncOnCPUThread()
 {
 	// TODO: Move frame limiting here to reduce CPU usage after sleeping...
+
 	ApplyLoadedPatches(PPT_CONTINUOUSLY);
 	ApplyLoadedPatches(PPT_COMBINED_0_1);
 
@@ -1618,6 +1648,7 @@ void VMManager::CheckForConfigChanges(const Pcsx2Config& old_config)
 	{
 		VMManager::ReloadPatches(true, true);
 	}
+
 }
 
 void VMManager::ApplySettings()
@@ -1637,7 +1668,15 @@ void VMManager::ApplySettings()
 	LoadSettings();
 
 	if (HasValidVM())
+	{
 		CheckForConfigChanges(old_config);
+	}
+	else if (GetMTGS().IsOpen())
+	{
+		// for the big picture UI, we still need to update GS settings, since it's running,
+		// and we don't update its config when we start the VM
+		CheckForGSConfigChanges(old_config);
+	}
 }
 
 bool VMManager::ReloadGameSettings()
@@ -1722,14 +1761,6 @@ static void HotkeySaveStateSlot(s32 slot)
 }
 
 BEGIN_HOTKEY_LIST(g_vm_manager_hotkeys)
-DEFINE_HOTKEY("TogglePause", "System", "Toggle Pause", [](s32 pressed) {
-	if (!pressed && VMManager::HasValidVM())
-		VMManager::SetPaused(VMManager::GetState() != VMState::Paused);
-})
-DEFINE_HOTKEY("ToggleFullscreen", "System", "Toggle Fullscreen", [](s32 pressed) {
-	if (!pressed)
-		Host::SetFullscreen(!Host::IsFullscreen());
-})
 DEFINE_HOTKEY("ToggleFrameLimit", "System", "Toggle Frame Limit", [](s32 pressed) {
 	if (!pressed)
 	{
@@ -1746,26 +1777,26 @@ DEFINE_HOTKEY("ToggleTurbo", "System", "Toggle Turbo", [](s32 pressed) {
                                       LimiterModeType::Nominal);
 	}
 })
-DEFINE_HOTKEY("ToggleSlowMotion", "System", "Toggle Slow Motion", [](s32 pressed) {
-	if (!pressed)
-	{
-		VMManager::SetLimiterMode((EmuConfig.LimiterMode != LimiterModeType::Slomo) ?
-                                      LimiterModeType::Slomo :
-                                      LimiterModeType::Nominal);
-	}
-})
 DEFINE_HOTKEY("HoldTurbo", "System", "Turbo (Hold)", [](s32 pressed) {
 	if (pressed > 0 && !s_limiter_mode_prior_to_hold_interaction.has_value())
 	{
 		s_limiter_mode_prior_to_hold_interaction = VMManager::GetLimiterMode();
 		VMManager::SetLimiterMode((s_limiter_mode_prior_to_hold_interaction.value() != LimiterModeType::Turbo) ?
-									  LimiterModeType::Turbo :
+                                      LimiterModeType::Turbo :
                                       LimiterModeType::Nominal);
 	}
 	else if (pressed >= 0 && s_limiter_mode_prior_to_hold_interaction.has_value())
 	{
 		VMManager::SetLimiterMode(s_limiter_mode_prior_to_hold_interaction.value());
 		s_limiter_mode_prior_to_hold_interaction.reset();
+	}
+})
+DEFINE_HOTKEY("ToggleSlowMotion", "System", "Toggle Slow Motion", [](s32 pressed) {
+	if (!pressed)
+	{
+		VMManager::SetLimiterMode((EmuConfig.LimiterMode != LimiterModeType::Slomo) ?
+                                      LimiterModeType::Slomo :
+                                      LimiterModeType::Nominal);
 	}
 })
 DEFINE_HOTKEY("IncreaseSpeed", "System", "Increase Target Speed", [](s32 pressed) {
@@ -1776,21 +1807,13 @@ DEFINE_HOTKEY("DecreaseSpeed", "System", "Decrease Target Speed", [](s32 pressed
 	if (!pressed)
 		HotkeyAdjustTargetSpeed(-0.1);
 })
-DEFINE_HOTKEY("FrameAdvance", "System", "Frame Advance", [](s32 pressed) {
-	if (!pressed)
-		VMManager::FrameAdvance(1);
-})
-DEFINE_HOTKEY("ShutdownVM", "System", "Shut Down Virtual Machine", [](s32 pressed) {
-	if (!pressed && VMManager::HasValidVM())
-		Host::RequestVMShutdown(true, true);
-})
 DEFINE_HOTKEY("ResetVM", "System", "Reset Virtual Machine", [](s32 pressed) {
 	if (!pressed && VMManager::HasValidVM())
 		VMManager::Reset();
 })
-DEFINE_HOTKEY("InputRecToggleMode", "System", "Toggle Input Recording Mode", [](s32 pressed) {
+DEFINE_HOTKEY("FrameAdvance", "System", "Frame Advance", [](s32 pressed) {
 	if (!pressed)
-		g_InputRecordingControls.RecordModeToggle();
+		VMManager::FrameAdvance(1);
 })
 
 DEFINE_HOTKEY("PreviousSaveStateSlot", "Save States", "Select Previous Save Slot", [](s32 pressed) {
@@ -1810,39 +1833,44 @@ DEFINE_HOTKEY("LoadStateFromSlot", "Save States", "Load State From Selected Slot
 		HotkeyLoadStateSlot(s_current_save_slot);
 })
 
-#define DEFINE_HOTKEY_SAVESTATE_X(slotnum) DEFINE_HOTKEY("SaveStateToSlot" #slotnum, \
-	"Save States", "Save State To Slot " #slotnum, [](s32 pressed) { if (!pressed) HotkeySaveStateSlot(slotnum); })
-#define DEFINE_HOTKEY_LOADSTATE_X(slotnum) DEFINE_HOTKEY("LoadStateFromSlot" #slotnum, \
-	"Save States", "Load State From Slot " #slotnum, [](s32 pressed) { \
+#define DEFINE_HOTKEY_SAVESTATE_X(slotnum, slotnumstr) DEFINE_HOTKEY("SaveStateToSlot" #slotnum, \
+	"Save States", "Save State To Slot " #slotnumstr, [](s32 pressed) { if (!pressed) HotkeySaveStateSlot(slotnum); })
+DEFINE_HOTKEY_SAVESTATE_X(1, 01)
+DEFINE_HOTKEY_SAVESTATE_X(2, 02)
+DEFINE_HOTKEY_SAVESTATE_X(3, 03)
+DEFINE_HOTKEY_SAVESTATE_X(4, 04)
+DEFINE_HOTKEY_SAVESTATE_X(5, 05)
+DEFINE_HOTKEY_SAVESTATE_X(6, 06)
+DEFINE_HOTKEY_SAVESTATE_X(7, 07)
+DEFINE_HOTKEY_SAVESTATE_X(8, 08)
+DEFINE_HOTKEY_SAVESTATE_X(9, 09)
+DEFINE_HOTKEY_SAVESTATE_X(10, 10)
+#define DEFINE_HOTKEY_LOADSTATE_X(slotnum, slotnumstr) DEFINE_HOTKEY("LoadStateFromSlot" #slotnum, \
+	"Save States", "Load State From Slot " #slotnumstr, [](s32 pressed) { \
 		if (!pressed) \
 			HotkeyLoadStateSlot(slotnum); \
 	})
-DEFINE_HOTKEY_SAVESTATE_X(1)
-DEFINE_HOTKEY_LOADSTATE_X(1)
-DEFINE_HOTKEY_SAVESTATE_X(2)
-DEFINE_HOTKEY_LOADSTATE_X(2)
-DEFINE_HOTKEY_SAVESTATE_X(3)
-DEFINE_HOTKEY_LOADSTATE_X(3)
-DEFINE_HOTKEY_SAVESTATE_X(4)
-DEFINE_HOTKEY_LOADSTATE_X(4)
-DEFINE_HOTKEY_SAVESTATE_X(5)
-DEFINE_HOTKEY_LOADSTATE_X(5)
-DEFINE_HOTKEY_SAVESTATE_X(6)
-DEFINE_HOTKEY_LOADSTATE_X(6)
-DEFINE_HOTKEY_SAVESTATE_X(7)
-DEFINE_HOTKEY_LOADSTATE_X(7)
-DEFINE_HOTKEY_SAVESTATE_X(8)
-DEFINE_HOTKEY_LOADSTATE_X(8)
-DEFINE_HOTKEY_SAVESTATE_X(9)
-DEFINE_HOTKEY_LOADSTATE_X(9)
-DEFINE_HOTKEY_SAVESTATE_X(10)
-DEFINE_HOTKEY_LOADSTATE_X(10)
+DEFINE_HOTKEY_LOADSTATE_X(1, 01)
+DEFINE_HOTKEY_LOADSTATE_X(2, 02)
+DEFINE_HOTKEY_LOADSTATE_X(3, 03)
+DEFINE_HOTKEY_LOADSTATE_X(4, 04)
+DEFINE_HOTKEY_LOADSTATE_X(5, 05)
+DEFINE_HOTKEY_LOADSTATE_X(6, 06)
+DEFINE_HOTKEY_LOADSTATE_X(7, 07)
+DEFINE_HOTKEY_LOADSTATE_X(8, 08)
+DEFINE_HOTKEY_LOADSTATE_X(9, 09)
+DEFINE_HOTKEY_LOADSTATE_X(10, 10)
+
 #undef DEFINE_HOTKEY_SAVESTATE_X
 #undef DEFINE_HOTKEY_LOADSTATE_X
 
+DEFINE_HOTKEY("OpenPauseMenu", "General", "Open Pause Menu", [](s32 pressed) {
+	if (!pressed)
+		FullscreenUI::OpenPauseMenu();
+})
 END_HOTKEY_LIST()
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(_UWP)
 
 #include "common/RedtapeWindows.h"
 

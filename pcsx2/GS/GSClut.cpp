@@ -117,6 +117,7 @@ void GSClut::InvalidateRange(u32 start_block, u32 end_block)
 }
 
 // Check the whole page, if the CLUT is slightly offset from a page boundary it could miss it.
+
 void GSClut::Invalidate(u32 block)
 {
 	if (!((block ^ m_write.TEX0.CBP) & ~0x1F))
@@ -760,6 +761,8 @@ void GSClut::Expand16(const u16* RESTRICT src, u32* RESTRICT dst, int w, const G
 		}
 	}
 }
+
+//
 
 bool GSClut::WriteState::IsDirty(const GIFRegTEX0& TEX0, const GIFRegTEXCLUT& TEXCLUT)
 {

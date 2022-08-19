@@ -285,8 +285,8 @@ const char* Pcsx2Config::GSOptions::GetRendererName(GSRendererType type)
 	switch (type)
 	{
 		case GSRendererType::Auto:  return "Auto";
-		case GSRendererType::DX11:  return "Direct3D 11";
-		case GSRendererType::DX12:  return "Direct3D 12";
+		case GSRendererType::DX11:  return "D3D11";
+		case GSRendererType::DX12:  return "D3D12";
 		case GSRendererType::Metal: return "Metal";
 		case GSRendererType::OGL:   return "OpenGL";
 		case GSRendererType::VK:    return "Vulkan";
@@ -315,16 +315,16 @@ Pcsx2Config::GSOptions::GSOptions()
 	SkipDuplicateFrames = false;
 	OsdShowMessages = true;
 	OsdShowSpeed = false;
-	OsdShowFPS = false;
+	OsdShowFPS = true;
 	OsdShowCPU = false;
 	OsdShowGPU = false;
 	OsdShowResolution = false;
 	OsdShowGSStats = false;
 	OsdShowIndicators = true;
 
-	HWDisableReadbacks = false;
+	HWDownloadMode = GSHardwareDownloadMode::Enabled;
 	AccurateDATE = true;
-	GPUPaletteConversion = false;
+	GPUPaletteConversion = true;
 	AutoFlushSW = true;
 	PreloadFrameWithGSData = false;
 	WrapGSMem = false;
@@ -392,7 +392,6 @@ bool Pcsx2Config::GSOptions::OptionsAreEqual(const GSOptions& right) const
 		OpEqu(Crop[2]) &&
 		OpEqu(Crop[3]) &&
 #endif
-
 		OpEqu(OsdScale) &&
 
 		OpEqu(Renderer) &&
@@ -404,6 +403,7 @@ bool Pcsx2Config::GSOptions::OptionsAreEqual(const GSOptions& right) const
 		OpEqu(TextureFiltering) &&
 		OpEqu(TexturePreloading) &&
 		OpEqu(GSDumpCompression) &&
+		OpEqu(HWDownloadMode) &&
 		OpEqu(Dithering) &&
 		OpEqu(MaxAnisotropy) &&
 		OpEqu(SWExtraThreads) &&
@@ -542,7 +542,6 @@ void Pcsx2Config::GSOptions::ReloadIniSettings()
 	GSSettingBool(OsdShowGSStats);
 	GSSettingBool(OsdShowIndicators);
 
-	GSSettingBool(HWDisableReadbacks);
 	GSSettingBoolEx(AccurateDATE, "accurate_date");
 	GSSettingBoolEx(GPUPaletteConversion, "paltex");
 	GSSettingBoolEx(AutoFlushSW, "autoflush_sw");
@@ -590,6 +589,7 @@ void Pcsx2Config::GSOptions::ReloadIniSettings()
 	GSSettingIntEnumEx(TextureFiltering, "filter");
 	GSSettingIntEnumEx(TexturePreloading, "texture_preloading");
 	GSSettingIntEnumEx(GSDumpCompression, "GSDumpCompression");
+	GSSettingIntEnumEx(HWDownloadMode, "HWDownloadMode");
 	GSSettingIntEx(Dithering, "dithering_ps2");
 	GSSettingIntEx(MaxAnisotropy, "MaxAnisotropy");
 	GSSettingIntEx(SWExtraThreads, "extrathreads");
@@ -722,7 +722,6 @@ void Pcsx2Config::SPU2Options::LoadSave(SettingsWrapper& wrap)
 		SettingsWrapEntry(Latency);
 		SynchMode = static_cast<SynchronizationMode>(wrap.EntryBitfield(CURRENT_SETTINGS_SECTION, "SynchMode", static_cast<int>(SynchMode), static_cast<int>(SynchMode)));
 		SettingsWrapEntry(SpeakerConfiguration);
-		SettingsWrapEntry(DplDecodingLevel);
 	}
 }
 

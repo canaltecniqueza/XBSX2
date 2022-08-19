@@ -134,7 +134,7 @@ static std::array<std::unique_ptr<InputSource>, static_cast<u32>(InputSourceType
 // ------------------------------------------------------------------------
 // Hotkeys
 // ------------------------------------------------------------------------
-static const HotkeyInfo* const s_hotkey_list[] = {g_host_hotkeys, g_vm_manager_hotkeys, g_gs_hotkeys};
+static const HotkeyInfo* const s_hotkey_list[] = {g_vm_manager_hotkeys, g_gs_hotkeys, g_host_hotkeys};
 
 // ------------------------------------------------------------------------
 // Tracking host mouse movement and turning into relative events
@@ -390,6 +390,9 @@ static std::array<const char*, static_cast<u32>(InputSourceType::Count)> s_input
 #ifdef _WIN32
 	"XInput",
 #endif
+#if defined(_WIN32) && !defined(_UWP)
+	"RawInput",
+#endif
 #ifdef SDL_BUILD
 	"SDL",
 #endif
@@ -496,6 +499,12 @@ std::vector<const HotkeyInfo*> InputManager::GetHotkeyList()
 		for (const HotkeyInfo* hotkey = hotkey_list; hotkey->name != nullptr; hotkey++)
 			ret.push_back(hotkey);
 	}
+	std::sort(ret.begin(), ret.end(), [](const HotkeyInfo* left, const HotkeyInfo* right) {
+		// category -> display name
+		if (const int res = StringUtil::Strcasecmp(left->category, right->category); res != 0)
+			return (res < 0);
+		return (StringUtil::Strcasecmp(left->display_name, right->display_name) < 0);
+	});
 	return ret;
 }
 
@@ -778,7 +787,19 @@ void InputManager::UpdatePointerAbsolutePosition(u32 index, float x, float y)
 
 void InputManager::UpdatePointerRelativeDelta(u32 index, InputPointerAxis axis, float d, bool raw_input)
 {
+	if (raw_input != IsUsingRawInput())
+		return;
+
 	s_pointer_state[index][static_cast<u8>(axis)].delta.fetch_add(static_cast<s32>(d * 65536.0f), std::memory_order_release);
+}
+
+bool InputManager::IsUsingRawInput()
+{
+#if defined(_WIN32) && !defined(_UWP)
+	return static_cast<bool>(s_input_sources[static_cast<u32>(InputSourceType::RawInput)]);
+#else
+	return false;
+#endif
 }
 
 bool InputManager::HasPointerAxisBinds()
@@ -1148,6 +1169,9 @@ static void UpdateInputSourceState(
 
 #ifdef _WIN32
 #include "Frontend/XInputSource.h"
+#ifndef _UWP
+#include "Frontend/Win32RawInputSource.h"
+#endif
 #endif
 
 #ifdef SDL_BUILD
@@ -1158,6 +1182,9 @@ void InputManager::ReloadSources(SettingsInterface& si, std::unique_lock<std::mu
 {
 #ifdef _WIN32
 	UpdateInputSourceState<XInputSource>(si, settings_lock, InputSourceType::XInput, false);
+#ifndef _UWP
+	UpdateInputSourceState<Win32RawInputSource>(si, settings_lock, InputSourceType::RawInput, false);
+#endif
 #endif
 #ifdef SDL_BUILD
 	UpdateInputSourceState<SDLInputSource>(si, settings_lock, InputSourceType::SDL, true);

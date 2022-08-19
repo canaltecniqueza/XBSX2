@@ -27,7 +27,6 @@ static u32 qwctag(u32 mask)
 static u32 QWCinVIFMFIFO(u32 DrainADDR, u32 qwc)
 {
 	u32 ret;
-
 	//Calculate what we have in the fifo.
 	if (DrainADDR <= spr0ch.madr)
 	{
@@ -52,7 +51,7 @@ static __fi bool mfifoVIF1rbTransfer()
 	u32 mfifoqwc = std::min(QWCinVIFMFIFO(vif1ch.madr, vif1ch.qwc), vif1ch.qwc);
 	u32* src;
 	bool ret;
-
+	
 	if (mfifoqwc == 0)
 	{
 		DevCon.Warning("VIF MFIFO no QWC before transfer (in transfer function, bit late really)");
@@ -80,17 +79,17 @@ static __fi bool mfifoVIF1rbTransfer()
 
 		if (ret)
 		{
-			if (vif1.irqoffset.value != 0)
+			if(vif1.irqoffset.value != 0)
 				DevCon.Warning("VIF1 MFIFO Offest != 0! vifoffset=%x", vif1.irqoffset.value);
-			/* and second copy 's2' bytes from 'maddr' to '&data[s1]' */
+            /* and second copy 's2' bytes from 'maddr' to '&data[s1]' */
 			//DevCon.Warning("Loopyloop");
 			vif1ch.tadr = qwctag(vif1ch.tadr);
 			vif1ch.madr = qwctag(vif1ch.madr);
 
-			src = (u32*)PSM(vif1ch.madr);
-			if (src == NULL)
+            src = (u32*)PSM(vif1ch.madr);
+            if (src == NULL)
 				return false;
-			VIF1transfer(src, ((mfifoqwc << 2) - s1));
+            VIF1transfer(src, ((mfifoqwc << 2) - s1));
 		}
 	}
 	else
@@ -138,6 +137,7 @@ static __fi void mfifo_VIF1chain()
 		//It does an END tag (which normally doesn't increment TADR because it breaks Soul Calibur 2)
 		//with a QWC of 1 (rare) so we need to increment the TADR in the case of MFIFO.
 		vif1ch.tadr = vif1ch.madr;
+		
 	}
 	else
 	{
@@ -234,6 +234,7 @@ void mfifoVIF1transfer()
 			{
 				vif1.inprogress &= ~1;
 				return; //IRQ set by VIFTransfer
+				
 			}
 			g_vif1Cycles += 2;
 		}
@@ -260,14 +261,13 @@ void mfifoVIF1transfer()
 
 		vif1ch.tadr = qwctag(vif1ch.tadr);
 
-		if (vif1ch.qwc > 0)
+		if(vif1ch.qwc > 0) 
 			vif1.inprogress |= 1;
 	}
 	else
 	{
 		DevCon.Warning("Vif MFIFO QWC not 0 on tag");
 	}
-
 
 	VIF_LOG("mfifoVIF1transfer end %x madr %x, tadr %x", vif1ch.chcr._u32, vif1ch.madr, vif1ch.tadr);
 }
@@ -283,13 +283,12 @@ void vifMFIFOInterrupt()
 		return;
 	}
 
-	if (gifRegs.stat.APATH == 2 && gifUnit.gifPath[1].isDone())
+	if (gifRegs.stat.APATH == 2  && gifUnit.gifPath[1].isDone())
 	{
 		gifRegs.stat.APATH = 0;
 		gifRegs.stat.OPH = 0;
 
-		if (gifUnit.checkPaths(1, 0, 1))
-			gifUnit.Execute(false, true);
+		if (gifUnit.checkPaths(1,0,1)) gifUnit.Execute(false, true);
 	}
 
 	if (vif1ch.chcr.DIR)
@@ -314,7 +313,7 @@ void vifMFIFOInterrupt()
 	// we handle that separately (KH2 for testing)
 
 	// Simulated GS transfer time done, clear the flags
-
+	
 	if (vif1.irq && vif1.vifstalled.enabled && vif1.vifstalled.value == VIF_IRQ_STALL)
 	{
 		VIF_LOG("VIF MFIFO Code Interrupt detected");
@@ -327,7 +326,7 @@ void vifMFIFOInterrupt()
 
 		hwIntcIrq(INTC_VIF1);
 		--vif1.irq;
-
+		
 		if (vif1Regs.stat.test(VIF1_STAT_VSS | VIF1_STAT_VIS | VIF1_STAT_VFS))
 		{
 			//vif1Regs.stat.FQC = 0; // FQC=0
@@ -355,8 +354,7 @@ void vifMFIFOInterrupt()
 		vif1Regs.stat.VPS = VPS_IDLE;
 	}
 
-	if (vif1.inprogress & 0x10)
-	{
+	if(vif1.inprogress & 0x10) {
 		FireMFIFOEmpty();
 		return;
 	}
@@ -365,8 +363,7 @@ void vifMFIFOInterrupt()
 
 	if (!vif1.done || vif1ch.qwc)
 	{
-		switch (vif1.inprogress & 1)
-		{
+		switch(vif1.inprogress & 1) {
 			case 0: //Set up transfer
 				mfifoVIF1transfer();
 				vif1Regs.stat.FQC = std::min((u32)0x10, vif1ch.qwc);

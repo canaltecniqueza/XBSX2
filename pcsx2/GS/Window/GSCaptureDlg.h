@@ -15,6 +15,8 @@
 
 #pragma once
 
+#ifndef _UWP
+
 #include "GSDialog.h"
 #include "GS/resource.h"
 #include <streams.h>
@@ -49,3 +51,5 @@ public:
 	INT_PTR m_colorspace;
 	wil::com_ptr_nothrow<IBaseFilter> m_enc;
 };
+
+#endif

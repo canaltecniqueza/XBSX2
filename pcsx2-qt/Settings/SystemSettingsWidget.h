@@ -29,6 +29,9 @@ public:
 	SystemSettingsWidget(SettingsDialog* dialog, QWidget* parent);
 	~SystemSettingsWidget();
 
+private Q_SLOTS:
+	void updateVU1InstantState();
+
 private:
 	int getGlobalClampingModeIndex(bool vu) const;
 	int getClampingModeIndex(bool vu) const;

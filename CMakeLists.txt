@@ -48,6 +48,9 @@ if (QT_BUILD)
 		add_subdirectory(updater)
 	endif()
 endif()
+if (NOGUI_BUILD)
+	add_subdirectory(pcsx2-nogui)
+endif()
 
 # tests
 if(ACTUALLY_ENABLE_TESTS)

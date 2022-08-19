@@ -1724,6 +1724,9 @@
     <ClCompile Include="Frontend\D3D11HostDisplay.cpp">
       <Filter>Host</Filter>
     </ClCompile>
+	    <ClCompile Include="Frontend\Achievements.cpp">
+      <Filter>Host</Filter>
+    </ClCompile>
     <ClCompile Include="gui\AppHost.cpp">
       <Filter>AppHost</Filter>
     </ClCompile>
@@ -2936,6 +2939,9 @@
       <Filter>Host</Filter>
     </ClInclude>
     <ClInclude Include="Frontend\D3D11HostDisplay.h">
+      <Filter>Host</Filter>
+    </ClInclude>
+	    <ClInclude Include="Frontend\Achievements.h">
       <Filter>Host</Filter>
     </ClInclude>
     <ClInclude Include="gui\AppHost.h">

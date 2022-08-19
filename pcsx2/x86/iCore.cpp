@@ -400,7 +400,7 @@ int _allocGPRtoXMMreg(int xmmreg, int gprreg, int mode)
 	if (xmmreg == -1)
 		xmmreg = _getFreeXMMreg();
 
-	if (xmmreg == -1)
+		if (xmmreg == -1)
 	{
 		pxFailDev("*PCSX2*: XMM Reg Allocation Error in _allocGPRtoXMMreg()!");
 		throw Exception::FailedToAllocateRegister();
@@ -462,7 +462,7 @@ int _allocFPACCtoXMMreg(int xmmreg, int mode)
 	if (xmmreg == -1)
 		xmmreg = _getFreeXMMreg();
 
-	if (xmmreg == -1)
+		if (xmmreg == -1)
 	{
 		pxFailDev("*PCSX2*: XMM Reg Allocation Error in _allocFPACCtoXMMreg()!");
 		throw Exception::FailedToAllocateRegister();

@@ -19,6 +19,7 @@
 
 #include <wx/filename.h>
 
+
 #define g_MaxPath 255 // 255 is safer with antiquated Win32 ASCII APIs.
 
 // --------------------------------------------------------------------------------------

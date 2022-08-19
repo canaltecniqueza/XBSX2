@@ -530,8 +530,8 @@ s32 FileMemoryCard::Save(uint slot, const u8* src, u32 adr, int size)
 		if (elapsed > std::chrono::seconds(5))
 		{
 			const std::string_view filename(Path::GetFileName(m_filenames[slot]));
-			Host::AddKeyedFormattedOSDMessage(StringUtil::StdStringFromFormat("MemoryCardSave%u", slot), 10.0f,
-				"Memory Card %.*s written.", static_cast<int>(filename.size()), static_cast<const char*>(filename.data()));
+			Host::AddKeyedFormattedOSDMessage(StringUtil::StdStringFromFormat("MemoryCardSave%u", slot), 3.0f,
+				"Saving %.*s.", static_cast<int>(filename.size()), static_cast<const char*>(filename.data()));
 			last = std::chrono::system_clock::now();
 		}
 		return 1;

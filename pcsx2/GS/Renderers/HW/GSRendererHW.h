@@ -29,6 +29,7 @@ public:
 	static constexpr int MAX_FRAMEBUFFER_HEIGHT = 1280;
 
 private:
+
 	static constexpr float SSR_UV_TOLERANCE = 1.0f;
 
 #pragma region hacks

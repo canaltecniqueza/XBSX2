@@ -54,6 +54,9 @@ private:
 	GLenum m_int_type;
 	u32 m_int_shift;
 
+	// Allow to track size of allocated memory
+	u32 m_mem_usage;
+
 public:
 	explicit GSTextureOGL(Type type, int width, int height, int levels, Format format, GLuint fbo_read);
 	virtual ~GSTextureOGL();
@@ -68,6 +71,7 @@ public:
 	void Swap(GSTexture* tex) final;
 
 	GSMap Read(const GSVector4i& r, AlignedBuffer<u8, 32>& buffer);
+	bool IsDepth() { return (m_type == Type::DepthStencil || m_type == Type::SparseDepthStencil); }
 	bool IsIntegerFormat() const
 	{
 		return (m_int_format == GL_RED_INTEGER || m_int_format == GL_RGBA_INTEGER);
@@ -84,4 +88,8 @@ public:
 
 	void Clear(const void* data);
 	void Clear(const void* data, const GSVector4i& area);
+
+	void CommitPages(const GSVector2i& region, bool commit) final;
+
+	u32 GetMemUsage() final;
 };

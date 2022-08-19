@@ -208,8 +208,10 @@ private:
 		}
 	};
 
+#ifndef _UWP
 	wil::unique_couninitialize_call xaudio2CoInitialize;
 	wil::unique_hmodule xAudio2DLL;
+#endif
 	wil::com_ptr_nothrow<IXAudio2> pXAudio2;
 	IXAudio2MasteringVoice* pMasteringVoice = nullptr;
 	std::unique_ptr<BaseStreamingVoice> m_voiceContext;
@@ -218,6 +220,7 @@ private:
 public:
 	bool Init() override
 	{
+#ifndef _UWP
 		xaudio2CoInitialize = wil::CoInitializeEx_failfast(COINIT_MULTITHREADED);
 
 		xAudio2DLL.reset(LoadLibraryEx(XAUDIO2_DLL, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32));
@@ -237,6 +240,9 @@ public:
 		}
 
 		HRESULT hr = pXAudio2Create(&pXAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR);
+#else
+		HRESULT hr = XAudio2Create(&pXAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR);
+#endif
 		if (FAILED(hr))
 		{
 			Console.Error("Failed to init XAudio2 engine. Error Details: %08X", hr);
@@ -346,8 +352,10 @@ public:
 		}
 
 		pXAudio2.reset();
+#ifndef _UWP
 		xAudio2DLL.reset();
 		xaudio2CoInitialize.reset();
+#endif
 	}
 
 	int GetEmptySampleCount() override

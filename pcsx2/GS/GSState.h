@@ -130,10 +130,10 @@ class GSState : public GSAlignedClass<32>
 
 	struct GSTransferBuffer
 	{
-		int x, y;
-		int start, end, total;
 		u8* buff;
 		GIFRegBITBLTBUF m_blit;
+		int x, y;
+		int start, end, total;
 
 		GSTransferBuffer();
 		virtual ~GSTransferBuffer();

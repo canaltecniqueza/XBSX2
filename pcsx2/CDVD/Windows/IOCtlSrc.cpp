@@ -17,6 +17,7 @@
 #include "CDVD/CDVDdiscReader.h"
 #include "CDVD/CDVD.h"
 
+#ifndef _UWP
 #include <winioctl.h>
 #include <ntddcdvd.h>
 #include <ntddcdrm.h>
@@ -25,6 +26,7 @@
 #pragma warning(disable : 4091)
 #include <ntddscsi.h>
 #pragma warning(pop)
+#endif
 
 #include <cstddef>
 #include <cstdlib>
@@ -50,6 +52,7 @@ IOCtlSrc::~IOCtlSrc()
 // and reopened.
 bool IOCtlSrc::Reopen()
 {
+#ifndef _UWP
 	if (m_device != INVALID_HANDLE_VALUE)
 		CloseHandle(m_device);
 
@@ -69,10 +72,14 @@ bool IOCtlSrc::Reopen()
 		SetSpindleSpeed(false);
 
 	return true;
+#else
+	return false;
+#endif
 }
 
 void IOCtlSrc::SetSpindleSpeed(bool restore_defaults) const
 {
+#ifndef _UWP
 	// IOCTL_CDROM_SET_SPEED issues a SET CD SPEED command. So 0xFFFF should be
 	// equivalent to "optimal performance".
 	// 1x DVD-ROM and CD-ROM speeds are respectively 1385 KB/s and 150KB/s.
@@ -93,6 +100,7 @@ void IOCtlSrc::SetSpindleSpeed(bool restore_defaults) const
 	{
 		printf(" * CDVD: setSpindleSpeed failed!\n");
 	}
+#endif
 }
 
 u32 IOCtlSrc::GetSectorCount() const
@@ -117,6 +125,7 @@ const std::vector<toc_entry>& IOCtlSrc::ReadTOC() const
 
 bool IOCtlSrc::ReadSectors2048(u32 sector, u32 count, u8* buffer) const
 {
+#ifndef _UWP
 	std::lock_guard<std::mutex> guard(m_lock);
 	LARGE_INTEGER offset;
 	offset.QuadPart = sector * 2048ULL;
@@ -144,10 +153,14 @@ bool IOCtlSrc::ReadSectors2048(u32 sector, u32 count, u8* buffer) const
 	}
 
 	return false;
+#else
+	return false;
+#endif
 }
 
 bool IOCtlSrc::ReadSectors2352(u32 sector, u32 count, u8* buffer) const
 {
+#ifndef _UWP
 	struct sptdinfo
 	{
 		SCSI_PASS_THROUGH_DIRECT info;
@@ -201,10 +214,14 @@ bool IOCtlSrc::ReadSectors2352(u32 sector, u32 count, u8* buffer) const
 	}
 
 	return true;
+#else
+	return false;
+#endif
 }
 
 bool IOCtlSrc::ReadDVDInfo()
 {
+#ifndef _UWP
 	DWORD unused;
 	// 4 bytes header + 18 bytes layer descriptor - Technically you only need
 	// to read 17 bytes of the layer descriptor since bytes 17-2047 is for
@@ -272,10 +289,14 @@ bool IOCtlSrc::ReadDVDInfo()
 	}
 
 	return true;
+#else
+	return false;
+#endif
 }
 
 bool IOCtlSrc::ReadCDInfo()
 {
+#ifndef _UWP
 	DWORD unused;
 	CDROM_READ_TOC_EX toc_ex{};
 	toc_ex.Format = CDROM_READ_TOC_EX_FORMAT_TOC;
@@ -308,10 +329,14 @@ bool IOCtlSrc::ReadCDInfo()
 	m_media_type = -1;
 
 	return true;
+#else
+	return false;
+#endif
 }
 
 bool IOCtlSrc::DiscReady()
 {
+#ifndef _UWP
 	if (m_device == INVALID_HANDLE_VALUE)
 		return false;
 
@@ -330,4 +355,7 @@ bool IOCtlSrc::DiscReady()
 	}
 
 	return !!m_sectors;
+#else
+	return false;
+#endif
 }

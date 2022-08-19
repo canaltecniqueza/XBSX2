@@ -726,6 +726,7 @@ __fi bool mpeg2sliceIDEC()
 			{
 				return false;
 			}
+
 			macroblock_8& mb8 = decoder.mb8;
 			macroblock_rgb16& rgb16 = decoder.rgb16;
 			macroblock_rgb32& rgb32 = decoder.rgb32;
@@ -830,7 +831,6 @@ __fi bool mpeg2sliceIDEC()
 
 			case 2:
 			{
-
 				pxAssert(decoder.ipu0_data > 0);
 
 				uint read = ipu_fifo.out.write((u32*)decoder.GetIpuDataPtr(), decoder.ipu0_data);
@@ -842,7 +842,6 @@ __fi bool mpeg2sliceIDEC()
 					ipu_cmd.pos[1] = 2;
 					return false;
 				}
-
 				mbaCount = 0;
 				if (read)
 				{

@@ -73,6 +73,7 @@ HMODULE hpcap = nullptr;
 //
 bool load_pcap()
 {
+#ifndef _UWP
 	if (hpcap != nullptr)
 		return true;
 
@@ -126,10 +127,15 @@ bool load_pcap()
 #include "pcap_io_win32_funcs.h"
 
 	return true;
+#else
+	return false;
+#endif
 }
 
 void unload_pcap()
 {
-	FreeLibrary(hpcap);
+#ifndef _UWP
+ 	FreeLibrary(hpcap);
+#endif
 	hpcap = nullptr;
 }
