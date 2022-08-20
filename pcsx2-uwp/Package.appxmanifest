@@ -34,5 +34,6 @@
     <Capability Name="codeGeneration"/>
     <uap:Capability Name="removableStorage"/>
     <rescap:Capability Name="expandedResources" />
+    <rescap:Capability Name="runFullTrust" />
   </Capabilities>
 </Package>
